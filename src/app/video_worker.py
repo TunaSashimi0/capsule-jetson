@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import threading
 import time
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Generator
 
@@ -28,6 +28,10 @@ class CounterSettings:
 @dataclass
 class CounterStats:
     capsule_count: int = 0
+    avg_width_px: float = 0.0
+    avg_height_px: float = 0.0
+    avg_angle_deg: float = 0.0
+    measurements: list[dict[str, float | int | str]] = field(default_factory=list)
     fps: float = 0.0
     status: str = "idle"
     model: str = ""
@@ -71,7 +75,7 @@ class VideoWorker:
             self._thread = None
             self._stats.status = "stopped"
 
-    def stats(self) -> dict[str, float | int | str]:
+    def stats(self) -> dict[str, object]:
         with self._lock:
             return asdict(self._stats)
 
@@ -86,10 +90,11 @@ class VideoWorker:
 
     def _run(self, settings: CounterSettings) -> None:
         model_path = Path(settings.model)
+        downloadable_models = {"yolo11n.pt", "yolo11n-obb.pt"}
         if not model_path.exists() and not settings.model.endswith(".pt"):
             self._set_placeholder(f"Model not found: {settings.model}", settings)
             return
-        if not model_path.exists() and settings.model != "yolo11n.pt":
+        if not model_path.exists() and settings.model not in downloadable_models:
             self._set_placeholder(f"Train first: {settings.model}", settings)
             return
 
@@ -139,6 +144,10 @@ class VideoWorker:
                     self._latest_jpeg = jpeg
                     self._stats = CounterStats(
                         capsule_count=summary.capsule_count,
+                        avg_width_px=summary.avg_width_px,
+                        avg_height_px=summary.avg_height_px,
+                        avg_angle_deg=summary.avg_angle_deg,
+                        measurements=summary.measurements_as_dicts(limit=20),
                         fps=fps,
                         status="running",
                         model=settings.model,
@@ -159,6 +168,7 @@ class VideoWorker:
         with self._lock:
             self._latest_jpeg = self._encode_jpeg(frame)
             self._stats = CounterStats(
+                measurements=[],
                 status=message,
                 model=settings.model,
                 source=settings.source,

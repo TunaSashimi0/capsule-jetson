@@ -7,7 +7,8 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 LABELED_DATA_DIR = PROJECT_ROOT / "labeled_data"
 PREPARED_DATA_DIR = PROJECT_ROOT / "data" / "prepared"
 DATA_YAML = PROJECT_ROOT / "configs" / "data" / "capsule.yaml"
-DEFAULT_TRAINED_MODEL = PROJECT_ROOT / "runs" / "train" / "capsule_yolo11n" / "weights" / "best.pt"
+DEFAULT_BASE_MODEL = "yolo11n-obb.pt"
+DEFAULT_TRAINED_MODEL = PROJECT_ROOT / "runs" / "train" / "capsule_yolo11n_obb" / "weights" / "best.pt"
 
 IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png", ".bmp", ".tif", ".tiff", ".webp"}
 

@@ -16,11 +16,13 @@ def draw_status_panel(
     source_label: str,
 ) -> np.ndarray:
     output = frame.copy()
-    panel_height = 118
+    panel_height = 168
     cv2.rectangle(output, (0, 0), (output.shape[1], panel_height), (20, 24, 31), -1)
 
     lines = [
         f"Capsules: {summary.capsule_count}",
+        f"Avg W x H: {summary.avg_width_px:.1f} x {summary.avg_height_px:.1f} px",
+        f"Avg Angle: {summary.avg_angle_deg:.1f} deg",
         f"FPS: {fps:.1f}",
         f"Confidence: {conf:.2f}",
         f"Source: {source_label}",

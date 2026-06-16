@@ -47,7 +47,8 @@ body {
 
 .metric,
 .status,
-.controls {
+.controls,
+.measurements {
   border: 1px solid #2e3640;
   border-radius: 8px;
   background: #20262e;
@@ -78,6 +79,52 @@ label span {
 
 strong {
   font-size: 24px;
+}
+
+small {
+  color: #9aa8b8;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.measurements {
+  min-height: 150px;
+}
+
+.table-wrap {
+  max-height: 220px;
+  overflow: auto;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-size: 13px;
+}
+
+th,
+td {
+  border-bottom: 1px solid #303945;
+  padding: 7px 4px;
+  text-align: right;
+}
+
+th:first-child,
+td:first-child {
+  text-align: left;
+}
+
+th {
+  color: #9aa8b8;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+td {
+  color: #e7edf4;
 }
 
 .controls {

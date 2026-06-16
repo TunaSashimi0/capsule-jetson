@@ -29,6 +29,44 @@
           </div>
         </div>
 
+        <div class="metric-row">
+          <div class="metric">
+            <span class="label">Avg Width</span>
+            <strong><span id="avg-width">0.0</span><small> px</small></strong>
+          </div>
+          <div class="metric">
+            <span class="label">Avg Height</span>
+            <strong><span id="avg-height">0.0</span><small> px</small></strong>
+          </div>
+        </div>
+
+        <div class="metric">
+          <span class="label">Avg Rotation</span>
+          <strong><span id="avg-angle">0.0</span><small> deg</small></strong>
+        </div>
+
+        <section class="measurements">
+          <span class="label">Capsule Measurements</span>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Conf</th>
+                  <th>W</th>
+                  <th>H</th>
+                  <th>Angle</th>
+                </tr>
+              </thead>
+              <tbody id="measurement-rows">
+                <tr>
+                  <td colspan="5">No detections</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
         <form id="settings-form" class="controls">
           <label>
             <span>Model path</span>
@@ -79,6 +117,10 @@
       const countEl = document.querySelector("#capsule-count");
       const fpsEl = document.querySelector("#fps");
       const modelEl = document.querySelector("#model-state");
+      const avgWidthEl = document.querySelector("#avg-width");
+      const avgHeightEl = document.querySelector("#avg-height");
+      const avgAngleEl = document.querySelector("#avg-angle");
+      const measurementRowsEl = document.querySelector("#measurement-rows");
       const statusEl = document.querySelector("#status");
       const form = document.querySelector("#settings-form");
       const stopButton = document.querySelector("#stop-button");
@@ -88,8 +130,27 @@
         const data = await response.json();
         countEl.textContent = data.capsule_count ?? 0;
         fpsEl.textContent = Number(data.fps ?? 0).toFixed(1);
+        avgWidthEl.textContent = Number(data.avg_width_px ?? 0).toFixed(1);
+        avgHeightEl.textContent = Number(data.avg_height_px ?? 0).toFixed(1);
+        avgAngleEl.textContent = Number(data.avg_angle_deg ?? 0).toFixed(1);
         modelEl.textContent = data.model_exists ? "Ready" : "Missing";
         statusEl.textContent = data.status ?? "idle";
+
+        const measurements = data.measurements ?? [];
+        if (!measurements.length) {
+          measurementRowsEl.innerHTML = `<tr><td colspan="5">No detections</td></tr>`;
+          return;
+        }
+
+        measurementRowsEl.innerHTML = measurements.map((item) => `
+          <tr>
+            <td>${item.index}</td>
+            <td>${Number(item.confidence ?? 0).toFixed(2)}</td>
+            <td>${Number(item.width_px ?? 0).toFixed(1)}</td>
+            <td>${Number(item.height_px ?? 0).toFixed(1)}</td>
+            <td>${Number(item.angle_deg ?? 0).toFixed(1)}</td>
+          </tr>
+        `).join("");
       }
 
       form.addEventListener("submit", async (event) => {

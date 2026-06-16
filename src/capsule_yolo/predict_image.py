@@ -8,7 +8,7 @@ from .config import DEFAULT_TRAINED_MODEL
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Run capsule counter predictions on images.")
+    parser = argparse.ArgumentParser(description="Run OBB capsule counter predictions on images.")
     parser.add_argument("--model", default=str(DEFAULT_TRAINED_MODEL), help="Model checkpoint path.")
     parser.add_argument("--source", default="data/prepared/images/test", help="Image, directory, or glob source.")
     parser.add_argument("--imgsz", type=int, default=640, help="Inference image size.")

@@ -1,6 +1,6 @@
 # YOLO Capsule Counter
 
-This project trains and runs a rudimentary YOLO11n capsule counter for edge-device testing. The current uploaded dataset contains one class, `capsule`, so this implementation counts capsules only. Defect detection should be added later by relabeling data with defect-aware classes such as `capsule_good` and `capsule_defect`.
+This project trains and runs a rudimentary YOLO11n-OBB capsule counter for edge-device testing. The current uploaded dataset contains one class, `capsule`, with oriented bounding box labels, so this implementation counts capsules and reports each capsule's pixel width, pixel height, and image-plane rotation. Defect detection should be added later by relabeling data with defect-aware classes such as `capsule_good` and `capsule_defect`.
 
 ## Current Dataset
 
@@ -14,7 +14,7 @@ labeled_data/
   notes.json
 ```
 
-The current data audit found 19 images, 19 label files, and 45 labeled capsule boxes.
+The current OBB data audit found 29 images, 29 label files, and 93 labeled capsule boxes.
 
 ## Environment
 
@@ -54,13 +54,13 @@ python -m src.capsule_yolo.train --epochs 100 --imgsz 640 --batch 4
 The trained weights will be written under:
 
 ```text
-runs/train/capsule_yolo11n/weights/
+runs/train/capsule_yolo11n_obb/weights/
 ```
 
 ## Validate
 
 ```powershell
-python -m src.capsule_yolo.validate --model runs/train/capsule_yolo11n/weights/best.pt
+python -m src.capsule_yolo.validate --model runs/train/capsule_yolo11n_obb/weights/best.pt
 ```
 
 ## Run Video Counter
@@ -68,13 +68,13 @@ python -m src.capsule_yolo.validate --model runs/train/capsule_yolo11n/weights/b
 Use a webcam:
 
 ```powershell
-python -m src.capsule_yolo.infer_video --model runs/train/capsule_yolo11n/weights/best.pt --source 0
+python -m src.capsule_yolo.infer_video --model runs/train/capsule_yolo11n_obb/weights/best.pt --source 0
 ```
 
 Use a video file:
 
 ```powershell
-python -m src.capsule_yolo.infer_video --model runs/train/capsule_yolo11n/weights/best.pt --source data/samples/test_video.mp4
+python -m src.capsule_yolo.infer_video --model runs/train/capsule_yolo11n_obb/weights/best.pt --source data/samples/test_video.mp4
 ```
 
 ## Run Basic UI
@@ -89,7 +89,7 @@ Then open:
 http://localhost:8000
 ```
 
-The UI streams annotated video and shows live capsule count, FPS, model path, confidence threshold, and source.
+The UI streams annotated video and shows live capsule count, FPS, model path, confidence threshold, source, average OBB dimensions, average rotation, and a per-capsule measurement table.
 
 ## Future Defect Detection
 

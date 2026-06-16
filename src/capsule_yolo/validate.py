@@ -8,7 +8,7 @@ from .config import DATA_YAML, DEFAULT_TRAINED_MODEL
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Validate a trained capsule counter.")
+    parser = argparse.ArgumentParser(description="Validate a trained OBB capsule counter.")
     parser.add_argument("--model", default=str(DEFAULT_TRAINED_MODEL), help="Model checkpoint path.")
     parser.add_argument("--data", default=str(DATA_YAML), help="Dataset YAML.")
     parser.add_argument("--imgsz", type=int, default=640, help="Validation image size.")

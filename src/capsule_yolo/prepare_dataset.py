@@ -57,7 +57,24 @@ def find_pairs(source_dir: Path) -> list[tuple[Path, Path]]:
     if not pairs:
         raise ValueError(f"No labeled image pairs found in {source_dir}")
 
+    validate_obb_labels([label_path for _, label_path in pairs])
     return pairs
+
+
+def validate_obb_labels(label_paths: list[Path]) -> None:
+    bad_rows: list[str] = []
+    for label_path in label_paths:
+        for line_number, line in enumerate(label_path.read_text(encoding="utf-8").splitlines(), start=1):
+            if not line.strip():
+                continue
+            columns = line.split()
+            if len(columns) != 9:
+                bad_rows.append(f"{label_path.name}:{line_number} has {len(columns)} columns")
+    if bad_rows:
+        raise ValueError(
+            "OBB labels must use 'class x1 y1 x2 y2 x3 y3 x4 y4'. "
+            f"Invalid rows: {'; '.join(bad_rows[:10])}"
+        )
 
 
 def split_pairs(
@@ -90,6 +107,8 @@ def split_pairs(
 
 
 def reset_output_dirs(output_dir: Path) -> None:
+    for cache_path in (output_dir / "labels").glob("*.cache"):
+        cache_path.unlink()
     for subset in ("train", "val", "test"):
         for kind in ("images", "labels"):
             target = output_dir / kind / subset
