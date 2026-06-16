@@ -1,7 +1,13 @@
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 from typing import Any
+
+APP_DIR = Path(__file__).resolve().parent
+PROJECT_ROOT_PATH = APP_DIR.parents[1]
+if str(PROJECT_ROOT_PATH) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT_PATH))
 
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
@@ -11,8 +17,6 @@ from fastapi.templating import Jinja2Templates
 from src.capsule_yolo.config import DEFAULT_TRAINED_MODEL, PROJECT_ROOT
 from src.app.video_worker import CounterSettings, VideoWorker
 
-
-APP_DIR = Path(__file__).resolve().parent
 
 app = FastAPI(title="YOLO Capsule Counter")
 app.mount("/static", StaticFiles(directory=APP_DIR / "static"), name="static")
@@ -68,3 +72,9 @@ async def update_settings(request: Request) -> JSONResponse:
 def stop() -> JSONResponse:
     worker.stop()
     return JSONResponse({"ok": True})
+
+
+if __name__ == "__main__":
+    import uvicorn
+
+    uvicorn.run("src.app.main:app", host="127.0.0.1", port=8000, reload=False)
