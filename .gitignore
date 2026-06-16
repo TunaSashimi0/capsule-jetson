@@ -1,0 +1,16 @@
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+runs/
+models/base/*.pt
+models/trained/*.pt
+models/exported/*
+
+data/prepared/
+data/samples/*
+!data/samples/.gitkeep
+
+.env
+*.log
