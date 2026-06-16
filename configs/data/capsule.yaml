@@ -1,0 +1,7 @@
+path: C:/Users/Administrator/Desktop/YOLO-capsule/data/prepared
+train: images/train
+val: images/val
+test: images/test
+
+names:
+  0: capsule

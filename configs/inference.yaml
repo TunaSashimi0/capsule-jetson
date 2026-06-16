@@ -1,0 +1,7 @@
+model: runs/train/capsule_yolo11n/weights/best.pt
+source: 0
+imgsz: 640
+conf: 0.25
+iou: 0.7
+device: null
+show: true

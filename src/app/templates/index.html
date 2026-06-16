@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>YOLO Capsule Counter</title>
+    <link rel="stylesheet" href="{{ url_for('static', path='/styles.css') }}">
+  </head>
+  <body>
+    <main class="shell">
+      <section class="video-area">
+        <img id="video-feed" src="/video_feed" alt="Annotated capsule counter video stream">
+      </section>
+
+      <aside class="panel">
+        <div class="metric primary">
+          <span class="label">Capsules</span>
+          <strong id="capsule-count">0</strong>
+        </div>
+
+        <div class="metric-row">
+          <div class="metric">
+            <span class="label">FPS</span>
+            <strong id="fps">0.0</strong>
+          </div>
+          <div class="metric">
+            <span class="label">Model</span>
+            <strong id="model-state">{{ "Ready" if model_exists else "Missing" }}</strong>
+          </div>
+        </div>
+
+        <form id="settings-form" class="controls">
+          <label>
+            <span>Model path</span>
+            <input name="model" value="{{ settings.model }}">
+          </label>
+
+          <label>
+            <span>Source</span>
+            <input name="source" value="{{ settings.source }}">
+          </label>
+
+          <div class="control-grid">
+            <label>
+              <span>Image size</span>
+              <input name="imgsz" type="number" min="320" step="32" value="{{ settings.imgsz }}">
+            </label>
+
+            <label>
+              <span>Confidence</span>
+              <input name="conf" type="number" min="0.01" max="1" step="0.01" value="{{ settings.conf }}">
+            </label>
+
+            <label>
+              <span>IoU</span>
+              <input name="iou" type="number" min="0.01" max="1" step="0.01" value="{{ settings.iou }}">
+            </label>
+
+            <label>
+              <span>Device</span>
+              <input name="device" placeholder="cpu, 0, cuda:0">
+            </label>
+          </div>
+
+          <div class="actions">
+            <button type="submit">Apply</button>
+            <button id="stop-button" type="button" class="secondary">Stop</button>
+          </div>
+        </form>
+
+        <div class="status">
+          <span class="label">Status</span>
+          <p id="status">Starting stream...</p>
+        </div>
+      </aside>
+    </main>
+
+    <script>
+      const countEl = document.querySelector("#capsule-count");
+      const fpsEl = document.querySelector("#fps");
+      const modelEl = document.querySelector("#model-state");
+      const statusEl = document.querySelector("#status");
+      const form = document.querySelector("#settings-form");
+      const stopButton = document.querySelector("#stop-button");
+
+      async function refreshStats() {
+        const response = await fetch("/stats");
+        const data = await response.json();
+        countEl.textContent = data.capsule_count ?? 0;
+        fpsEl.textContent = Number(data.fps ?? 0).toFixed(1);
+        modelEl.textContent = data.model_exists ? "Ready" : "Missing";
+        statusEl.textContent = data.status ?? "idle";
+      }
+
+      form.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const payload = Object.fromEntries(new FormData(form).entries());
+        await fetch("/settings", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+        document.querySelector("#video-feed").src = `/video_feed?ts=${Date.now()}`;
+        await refreshStats();
+      });
+
+      stopButton.addEventListener("click", async () => {
+        await fetch("/stop", { method: "POST" });
+        await refreshStats();
+      });
+
+      refreshStats();
+      setInterval(refreshStats, 1000);
+    </script>
+  </body>
+</html>

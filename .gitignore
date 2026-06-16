@@ -11,6 +11,7 @@ models/exported/*
 data/prepared/
 data/samples/*
 !data/samples/.gitkeep
+labeled_data/
 
 .env
 *.log
