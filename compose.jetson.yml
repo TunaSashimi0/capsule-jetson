@@ -1,0 +1,31 @@
+services:
+  capsule-counter:
+    build:
+      context: .
+      dockerfile: Dockerfile.jetson
+      args:
+        BASE_IMAGE: ${JETSON_BASE_IMAGE:?Set JETSON_BASE_IMAGE to an NVIDIA l4t-pytorch image matching this Jetson L4T release}
+    image: yolo-capsule:jetson
+    container_name: yolo-capsule
+    network_mode: host
+    runtime: nvidia
+    ipc: host
+    environment:
+      CAPSULE_MODEL: ${CAPSULE_MODEL:-/app/models/trained/capsule_yolo11n_obb_best.pt}
+      CAPSULE_SOURCE: ${CAPSULE_SOURCE:-csi:0}
+      CAPSULE_DEVICE: ${CAPSULE_DEVICE:-0}
+      CAPSULE_IMGSZ: ${CAPSULE_IMGSZ:-640}
+      CAPSULE_CONF: ${CAPSULE_CONF:-0.25}
+      CAPSULE_IOU: ${CAPSULE_IOU:-0.7}
+      YOLO_CONFIG_DIR: /tmp/ultralytics
+      MPLCONFIGDIR: /tmp/matplotlib
+    volumes:
+      - ./configs:/app/configs:ro
+      - ./data:/app/data
+      - ./models:/app/models
+      - ./runs:/app/runs
+      - /tmp/argus_socket:/tmp/argus_socket
+    group_add:
+      - video
+      - render
+    restart: unless-stopped

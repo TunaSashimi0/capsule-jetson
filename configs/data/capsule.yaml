@@ -1,4 +1,4 @@
-path: C:/Users/Administrator/Desktop/YOLO-capsule/data/prepared
+path: /home/tuna/Desktop/proj/YOLO-capsule/data/prepared
 train: images/train
 val: images/val
 test: images/test

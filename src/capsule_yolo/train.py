@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import argparse
+import shutil
+from pathlib import Path
 
 from ultralytics import YOLO
 
-from .config import DATA_YAML, DEFAULT_BASE_MODEL, PROJECT_ROOT
+from .config import DATA_YAML, DEFAULT_BASE_MODEL, DEFAULT_DEVICE, DEFAULT_TRAINED_MODEL, PROJECT_ROOT
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -17,7 +19,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--workers", type=int, default=0, help="Data loader workers. Use 0 on Windows.")
     parser.add_argument("--project", default=str(PROJECT_ROOT / "runs" / "train"), help="Output project directory.")
     parser.add_argument("--name", default="capsule_yolo11n_obb", help="Run name.")
-    parser.add_argument("--device", default=None, help="Device such as 0, cpu, cuda:0.")
+    parser.add_argument("--device", default=DEFAULT_DEVICE, help="Device such as 0, cpu, cuda:0.")
     parser.add_argument("--seed", type=int, default=42, help="Training seed.")
     return parser
 
@@ -36,6 +38,16 @@ def main() -> None:
         device=args.device,
         seed=args.seed,
     )
+
+    run_best = Path(args.project) / args.name / "weights" / "best.pt"
+    if not run_best.is_absolute():
+        run_best = PROJECT_ROOT / run_best
+    if run_best.exists():
+        DEFAULT_TRAINED_MODEL.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(run_best, DEFAULT_TRAINED_MODEL)
+        print(f"Copied deployable model to {DEFAULT_TRAINED_MODEL}")
+    else:
+        print(f"Training finished, but best.pt was not found at {run_best}")
 
 
 if __name__ == "__main__":

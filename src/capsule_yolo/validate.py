@@ -4,7 +4,7 @@ import argparse
 
 from ultralytics import YOLO
 
-from .config import DATA_YAML, DEFAULT_TRAINED_MODEL
+from .config import DATA_YAML, DEFAULT_DEVICE, DEFAULT_TRAINED_MODEL
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -13,7 +13,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--data", default=str(DATA_YAML), help="Dataset YAML.")
     parser.add_argument("--imgsz", type=int, default=640, help="Validation image size.")
     parser.add_argument("--batch", type=int, default=4, help="Batch size.")
-    parser.add_argument("--device", default=None, help="Device such as 0, cpu, cuda:0.")
+    parser.add_argument("--device", default=DEFAULT_DEVICE, help="Device such as 0, cpu, cuda:0.")
     return parser
 
 

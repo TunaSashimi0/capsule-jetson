@@ -10,9 +10,9 @@ import cv2
 import numpy as np
 from ultralytics import YOLO
 
-from src.capsule_yolo.config import parse_source
 from src.capsule_yolo.counting import CountSummary, summarize_result
 from src.capsule_yolo.drawing import annotated_frame, draw_status_panel
+from src.capsule_yolo.video_source import open_video_capture
 
 
 @dataclass
@@ -104,7 +104,11 @@ class VideoWorker:
             self._set_placeholder(f"Model load failed: {exc}", settings)
             return
 
-        capture = cv2.VideoCapture(parse_source(settings.source))
+        try:
+            capture, source_spec = open_video_capture(settings.source)
+        except Exception as exc:
+            self._set_placeholder(f"Source setup failed: {exc}", settings)
+            return
         if not capture.isOpened():
             self._set_placeholder(f"Could not open source: {settings.source}", settings)
             return
@@ -115,6 +119,7 @@ class VideoWorker:
             while not self._stop_event.is_set():
                 ok, frame = capture.read()
                 if not ok:
+                    self._set_placeholder(f"No frames from source: {settings.source}", settings)
                     break
 
                 result = model.predict(
@@ -137,7 +142,7 @@ class VideoWorker:
                     summary,
                     fps=fps,
                     conf=settings.conf,
-                    source_label=settings.source,
+                    source_label=source_spec.label or settings.source,
                 )
                 jpeg = self._encode_jpeg(frame_out)
                 with self._lock:

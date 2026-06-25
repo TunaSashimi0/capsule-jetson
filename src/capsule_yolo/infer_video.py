@@ -7,19 +7,20 @@ from pathlib import Path
 import cv2
 from ultralytics import YOLO
 
-from .config import DEFAULT_TRAINED_MODEL, parse_source
+from .config import DEFAULT_DEVICE, DEFAULT_TRAINED_MODEL
 from .counting import summarize_result
 from .drawing import annotated_frame
+from .video_source import open_video_capture
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Run real-time capsule counting on video or camera input.")
     parser.add_argument("--model", default=str(DEFAULT_TRAINED_MODEL), help="Model checkpoint path.")
-    parser.add_argument("--source", default="0", help="Camera index, video file, or stream URL.")
+    parser.add_argument("--source", default="0", help="Camera index, csi:0/cam0, video file, or stream URL.")
     parser.add_argument("--imgsz", type=int, default=640, help="Inference image size.")
     parser.add_argument("--conf", type=float, default=0.25, help="Confidence threshold.")
     parser.add_argument("--iou", type=float, default=0.7, help="NMS IoU threshold.")
-    parser.add_argument("--device", default=None, help="Device such as 0, cpu, cuda:0.")
+    parser.add_argument("--device", default=DEFAULT_DEVICE, help="Device such as 0, cpu, cuda:0.")
     parser.add_argument("--hide-window", action="store_true", help="Run without opening a preview window.")
     parser.add_argument("--output", default=None, help="Optional annotated video output path.")
     return parser
@@ -38,11 +39,9 @@ def create_writer(output: str | None, capture: cv2.VideoCapture) -> cv2.VideoWri
 
 def main() -> None:
     args = build_parser().parse_args()
-    source = parse_source(args.source)
-    source_label = str(args.source)
-
     model = YOLO(args.model)
-    capture = cv2.VideoCapture(source)
+    capture, source_spec = open_video_capture(args.source)
+    source_label = source_spec.label or str(args.source)
     if not capture.isOpened():
         raise RuntimeError(f"Could not open video source: {args.source}")
 

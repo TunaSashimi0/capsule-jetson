@@ -4,7 +4,7 @@ import argparse
 
 from ultralytics import YOLO
 
-from .config import DEFAULT_TRAINED_MODEL
+from .config import DEFAULT_DEVICE, DEFAULT_TRAINED_MODEL
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -14,7 +14,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--imgsz", type=int, default=640, help="Inference image size.")
     parser.add_argument("--conf", type=float, default=0.25, help="Confidence threshold.")
     parser.add_argument("--iou", type=float, default=0.7, help="NMS IoU threshold.")
-    parser.add_argument("--device", default=None, help="Device such as 0, cpu, cuda:0.")
+    parser.add_argument("--device", default=DEFAULT_DEVICE, help="Device such as 0, cpu, cuda:0.")
     parser.add_argument("--save", action="store_true", help="Save annotated images.")
     return parser
 

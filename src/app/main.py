@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 from typing import Any
@@ -23,7 +24,14 @@ app.mount("/static", StaticFiles(directory=APP_DIR / "static"), name="static")
 templates = Jinja2Templates(directory=APP_DIR / "templates")
 
 worker = VideoWorker()
-settings = CounterSettings(model=str(DEFAULT_TRAINED_MODEL), source="0")
+settings = CounterSettings(
+    model=os.getenv("CAPSULE_MODEL", str(DEFAULT_TRAINED_MODEL)),
+    source=os.getenv("CAPSULE_SOURCE", "0"),
+    imgsz=int(os.getenv("CAPSULE_IMGSZ", "640")),
+    conf=float(os.getenv("CAPSULE_CONF", "0.25")),
+    iou=float(os.getenv("CAPSULE_IOU", "0.7")),
+    device=os.getenv("CAPSULE_DEVICE", "0") or None,
+)
 
 
 @app.get("/", response_class=HTMLResponse)
