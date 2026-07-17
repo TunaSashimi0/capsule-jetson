@@ -28,7 +28,15 @@ class CountSummary:
 
     @property
     def capsule_count(self) -> int:
-        return self.by_class.get("capsule", self.total)
+        return self.total
+
+    @property
+    def defect_count(self) -> int:
+        return self.by_class.get("capsule_defect", 0)
+
+    @property
+    def good_count(self) -> int:
+        return self.by_class.get("capsule_good", 0)
 
     @property
     def avg_width_px(self) -> float:
@@ -80,7 +88,8 @@ def summarize_result(result: Any, target_class: str = "capsule") -> CountSummary
     counts: dict[str, int] = {}
     measurements: list[CapsuleMeasurement] = []
     for index, class_id in enumerate(class_ids):
-        class_name = names.get(int(class_id), str(int(class_id)))
+        numeric_class_id = int(class_id)
+        class_name = names.get(numeric_class_id, names.get(str(numeric_class_id), str(numeric_class_id)))
         counts[class_name] = counts.get(class_name, 0) + 1
 
         if index < len(xywhr_rows):

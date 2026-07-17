@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import argparse
+import json
+import math
 import random
 import shutil
 from dataclasses import dataclass
@@ -21,7 +23,24 @@ class DatasetSplit:
             raise ValueError(f"Split ratios must add to 1.0, got {total:.3f}")
 
 
-def find_pairs(source_dir: Path) -> list[tuple[Path, Path]]:
+def load_class_names(source_dir: Path) -> list[str]:
+    classes_path = source_dir / "classes.txt"
+    if not classes_path.exists():
+        raise FileNotFoundError(f"Missing class list: {classes_path}")
+
+    class_names = [
+        line.strip()
+        for line in classes_path.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+    if not class_names:
+        raise ValueError(f"No class names found in {classes_path}")
+    if len(class_names) != len(set(class_names)):
+        raise ValueError(f"Duplicate class names found in {classes_path}")
+    return class_names
+
+
+def find_pairs(source_dir: Path, class_count: int) -> list[tuple[Path, Path]]:
     image_dir = source_dir / "images"
     label_dir = source_dir / "labels"
     if not image_dir.exists():
@@ -57,19 +76,55 @@ def find_pairs(source_dir: Path) -> list[tuple[Path, Path]]:
     if not pairs:
         raise ValueError(f"No labeled image pairs found in {source_dir}")
 
-    validate_obb_labels([label_path for _, label_path in pairs])
+    validate_obb_labels([label_path for _, label_path in pairs], class_count)
     return pairs
 
 
-def validate_obb_labels(label_paths: list[Path]) -> None:
+def parse_obb_row(
+    label_path: Path, line_number: int, line: str, class_count: int
+) -> tuple[int, list[float]]:
+    columns = line.split()
+    location = f"{label_path.name}:{line_number}"
+    if len(columns) != 9:
+        raise ValueError(f"{location} has {len(columns)} columns; expected 9")
+
+    try:
+        class_id = int(columns[0])
+    except ValueError as exc:
+        raise ValueError(f"{location} has a non-integer class ID: {columns[0]}") from exc
+    if not 0 <= class_id < class_count:
+        raise ValueError(f"{location} has class ID {class_id}; expected 0 through {class_count - 1}")
+
+    try:
+        coordinates = [float(value) for value in columns[1:]]
+    except ValueError as exc:
+        raise ValueError(f"{location} contains a non-numeric coordinate") from exc
+    if not all(math.isfinite(value) for value in coordinates):
+        raise ValueError(f"{location} contains a non-finite coordinate")
+
+    clipped = [min(1.0, max(0.0, value)) for value in coordinates]
+    points = list(zip(clipped[0::2], clipped[1::2]))
+    twice_area = abs(
+        sum(
+            x1 * y2 - x2 * y1
+            for (x1, y1), (x2, y2) in zip(points, points[1:] + points[:1])
+        )
+    )
+    if twice_area <= 1e-12:
+        raise ValueError(f"{location} becomes a zero-area polygon after boundary clipping")
+    return class_id, coordinates
+
+
+def validate_obb_labels(label_paths: list[Path], class_count: int) -> None:
     bad_rows: list[str] = []
     for label_path in label_paths:
         for line_number, line in enumerate(label_path.read_text(encoding="utf-8").splitlines(), start=1):
             if not line.strip():
                 continue
-            columns = line.split()
-            if len(columns) != 9:
-                bad_rows.append(f"{label_path.name}:{line_number} has {len(columns)} columns")
+            try:
+                parse_obb_row(label_path, line_number, line, class_count)
+            except ValueError as exc:
+                bad_rows.append(str(exc))
     if bad_rows:
         raise ValueError(
             "OBB labels must use 'class x1 y1 x2 y2 x3 y3 x4 y4'. "
@@ -117,12 +172,41 @@ def reset_output_dirs(output_dir: Path) -> None:
             target.mkdir(parents=True, exist_ok=True)
 
 
-def copy_split_files(splits: dict[str, list[tuple[Path, Path]]], output_dir: Path) -> None:
+def write_clipped_label(source: Path, target: Path, class_count: int) -> tuple[int, int]:
+    output_rows: list[str] = []
+    clipped_coordinates = 0
+    clipped_boxes = 0
+    for line_number, line in enumerate(source.read_text(encoding="utf-8").splitlines(), start=1):
+        if not line.strip():
+            continue
+        class_id, coordinates = parse_obb_row(source, line_number, line, class_count)
+        clipped = [min(1.0, max(0.0, value)) for value in coordinates]
+        changed = sum(original != bounded for original, bounded in zip(coordinates, clipped))
+        clipped_coordinates += changed
+        clipped_boxes += int(changed > 0)
+        output_rows.append(" ".join([str(class_id), *(f"{value:.10g}" for value in clipped)]))
+
+    target.write_text("\n".join(output_rows) + "\n", encoding="utf-8")
+    return clipped_boxes, clipped_coordinates
+
+
+def copy_split_files(
+    splits: dict[str, list[tuple[Path, Path]]], output_dir: Path, class_count: int
+) -> tuple[int, int]:
     reset_output_dirs(output_dir)
+    clipped_boxes = 0
+    clipped_coordinates = 0
     for subset, pairs in splits.items():
         for image_path, label_path in pairs:
             shutil.copy2(image_path, output_dir / "images" / subset / image_path.name)
-            shutil.copy2(label_path, output_dir / "labels" / subset / label_path.name)
+            boxes, coordinates = write_clipped_label(
+                label_path,
+                output_dir / "labels" / subset / label_path.name,
+                class_count,
+            )
+            clipped_boxes += boxes
+            clipped_coordinates += coordinates
+    return clipped_boxes, clipped_coordinates
 
 
 def count_boxes(label_paths: list[Path]) -> int:
@@ -132,8 +216,12 @@ def count_boxes(label_paths: list[Path]) -> int:
     return total
 
 
-def write_data_yaml(output_dir: Path, data_yaml: Path) -> None:
+def write_data_yaml(output_dir: Path, data_yaml: Path, class_names: list[str]) -> None:
     yaml_path = output_dir.resolve().as_posix()
+    names = [
+        f"  {class_id}: {json.dumps(class_name)}"
+        for class_id, class_name in enumerate(class_names)
+    ]
     data_yaml.parent.mkdir(parents=True, exist_ok=True)
     data_yaml.write_text(
         "\n".join(
@@ -144,7 +232,7 @@ def write_data_yaml(output_dir: Path, data_yaml: Path) -> None:
                 "test: images/test",
                 "",
                 "names:",
-                "  0: capsule",
+                *names,
                 "",
             ]
         ),
@@ -153,15 +241,22 @@ def write_data_yaml(output_dir: Path, data_yaml: Path) -> None:
 
 
 def prepare_dataset(source_dir: Path, output_dir: Path, seed: int, split: DatasetSplit) -> None:
-    pairs = find_pairs(source_dir)
+    class_names = load_class_names(source_dir)
+    pairs = find_pairs(source_dir, len(class_names))
     splits = split_pairs(pairs, split, seed)
-    copy_split_files(splits, output_dir)
-    write_data_yaml(output_dir, DATA_YAML)
+    clipped_boxes, clipped_coordinates = copy_split_files(splits, output_dir, len(class_names))
+    write_data_yaml(output_dir, DATA_YAML, class_names)
 
     print(f"Prepared dataset from {source_dir}")
+    print(f"Classes: {', '.join(f'{index}={name}' for index, name in enumerate(class_names))}")
     for subset, subset_pairs in splits.items():
         labels = [label_path for _, label_path in subset_pairs]
         print(f"{subset}: {len(subset_pairs)} images, {count_boxes(labels)} boxes")
+    if clipped_coordinates:
+        print(
+            f"Boundary clipping: {clipped_coordinates} coordinates in {clipped_boxes} boxes "
+            "(prepared labels only)"
+        )
     print(f"Output: {output_dir}")
 
 

@@ -14,13 +14,27 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--imgsz", type=int, default=640, help="Validation image size.")
     parser.add_argument("--batch", type=int, default=4, help="Batch size.")
     parser.add_argument("--device", default=DEFAULT_DEVICE, help="Device such as 0, cpu, cuda:0.")
+    parser.add_argument(
+        "--task",
+        choices=("detect", "obb", "classify", "segment", "pose"),
+        default=None,
+        help="Optional model task. Exported OBB models may require --task obb.",
+    )
     return parser
 
 
 def main() -> None:
     args = build_parser().parse_args()
-    model = YOLO(args.model)
-    model.val(data=args.data, imgsz=args.imgsz, batch=args.batch, device=args.device)
+    model = YOLO(args.model, task=args.task) if args.task else YOLO(args.model)
+    validation_args = {
+        "data": args.data,
+        "imgsz": args.imgsz,
+        "batch": args.batch,
+        "device": args.device,
+    }
+    if args.task:
+        validation_args["task"] = args.task
+    model.val(**validation_args)
 
 
 if __name__ == "__main__":

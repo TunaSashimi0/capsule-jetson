@@ -28,6 +28,8 @@ class CounterSettings:
 @dataclass
 class CounterStats:
     capsule_count: int = 0
+    good_count: int = 0
+    defect_count: int = 0
     avg_width_px: float = 0.0
     avg_height_px: float = 0.0
     avg_angle_deg: float = 0.0
@@ -99,7 +101,7 @@ class VideoWorker:
             return
 
         try:
-            model = YOLO(settings.model)
+            model = YOLO(settings.model, task="obb")  #task obb
         except Exception as exc:
             self._set_placeholder(f"Model load failed: {exc}", settings)
             return
@@ -149,6 +151,8 @@ class VideoWorker:
                     self._latest_jpeg = jpeg
                     self._stats = CounterStats(
                         capsule_count=summary.capsule_count,
+                        good_count=summary.good_count,
+                        defect_count=summary.defect_count,
                         avg_width_px=summary.avg_width_px,
                         avg_height_px=summary.avg_height_px,
                         avg_angle_deg=summary.avg_angle_deg,
@@ -167,7 +171,7 @@ class VideoWorker:
 
     def _set_placeholder(self, message: str, settings: CounterSettings) -> None:
         frame = np.zeros((720, 1280, 3), dtype=np.uint8)
-        summary = CountSummary(total=0, by_class={"capsule": 0})
+        summary = CountSummary(total=0, by_class={"capsule_good": 0, "capsule_defect": 0})
         frame = draw_status_panel(frame, summary, fps=0.0, conf=settings.conf, source_label=settings.source)
         cv2.putText(frame, message[:90], (40, 220), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (235, 235, 235), 2, cv2.LINE_AA)
         with self._lock:

@@ -39,7 +39,9 @@ def create_writer(output: str | None, capture: cv2.VideoCapture) -> cv2.VideoWri
 
 def main() -> None:
     args = build_parser().parse_args()
-    model = YOLO(args.model)
+    # TensorRT engine filenames do not encode the Ultralytics task, so declare
+    # OBB explicitly instead of letting engine loading fall back to detection.
+    model = YOLO(args.model, task="obb")
     capture, source_spec = open_video_capture(args.source)
     source_label = source_spec.label or str(args.source)
     if not capture.isOpened():

@@ -14,8 +14,19 @@
 
       <aside class="panel">
         <div class="metric primary">
-          <span class="label">Capsules</span>
+          <span class="label">Total Capsules</span>
           <strong id="capsule-count">0</strong>
+        </div>
+
+        <div class="metric-row">
+          <div class="metric good-metric">
+            <span class="label">Good</span>
+            <strong id="good-count">0</strong>
+          </div>
+          <div class="metric defect-metric">
+            <span class="label">Defects</span>
+            <strong id="defect-count">0</strong>
+          </div>
         </div>
 
         <div class="metric-row">
@@ -52,6 +63,7 @@
               <thead>
                 <tr>
                   <th>ID</th>
+                  <th>Class</th>
                   <th>Conf</th>
                   <th>W</th>
                   <th>H</th>
@@ -60,7 +72,7 @@
               </thead>
               <tbody id="measurement-rows">
                 <tr>
-                  <td colspan="5">No detections</td>
+                  <td colspan="6">No detections</td>
                 </tr>
               </tbody>
             </table>
@@ -115,6 +127,8 @@
 
     <script>
       const countEl = document.querySelector("#capsule-count");
+      const goodCountEl = document.querySelector("#good-count");
+      const defectCountEl = document.querySelector("#defect-count");
       const fpsEl = document.querySelector("#fps");
       const modelEl = document.querySelector("#model-state");
       const avgWidthEl = document.querySelector("#avg-width");
@@ -129,6 +143,8 @@
         const response = await fetch("/stats");
         const data = await response.json();
         countEl.textContent = data.capsule_count ?? 0;
+        goodCountEl.textContent = data.good_count ?? 0;
+        defectCountEl.textContent = data.defect_count ?? 0;
         fpsEl.textContent = Number(data.fps ?? 0).toFixed(1);
         avgWidthEl.textContent = Number(data.avg_width_px ?? 0).toFixed(1);
         avgHeightEl.textContent = Number(data.avg_height_px ?? 0).toFixed(1);
@@ -138,19 +154,26 @@
 
         const measurements = data.measurements ?? [];
         if (!measurements.length) {
-          measurementRowsEl.innerHTML = `<tr><td colspan="5">No detections</td></tr>`;
+          measurementRowsEl.innerHTML = `<tr><td colspan="6">No detections</td></tr>`;
           return;
         }
 
         measurementRowsEl.innerHTML = measurements.map((item) => `
-          <tr>
+          <tr class="${item.class_name === "capsule_defect" ? "defect-row" : ""}">
             <td>${item.index}</td>
+            <td class="class-name">${escapeHtml(item.class_name ?? "unknown")}</td>
             <td>${Number(item.confidence ?? 0).toFixed(2)}</td>
             <td>${Number(item.width_px ?? 0).toFixed(1)}</td>
             <td>${Number(item.height_px ?? 0).toFixed(1)}</td>
             <td>${Number(item.angle_deg ?? 0).toFixed(1)}</td>
           </tr>
         `).join("");
+      }
+
+      function escapeHtml(value) {
+        const element = document.createElement("div");
+        element.textContent = String(value);
+        return element.innerHTML;
       }
 
       form.addEventListener("submit", async (event) => {

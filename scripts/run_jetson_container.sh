@@ -21,9 +21,18 @@ CAPSULE_CAMERA_DEVICE=${CAPSULE_CAMERA_DEVICE:-/dev/video${CAPSULE_SOURCE}}
 
 DEVICE_ARGS=()
 ARGUS_ARGS=()
+GROUP_ARGS=()
 if [[ -e /tmp/argus_socket ]]; then
   ARGUS_ARGS=(-v /tmp/argus_socket:/tmp/argus_socket)
 fi
+
+for group_name in video render; do
+  group_entry=$(getent group "$group_name" || true)
+  if [[ -n "$group_entry" ]]; then
+    IFS=: read -r _ _ group_id _ <<< "$group_entry"
+    GROUP_ARGS+=(--group-add "$group_id")
+  fi
+done
 
 if [[ "$CAPSULE_SOURCE" =~ ^[0-9]+$ ]]; then
   if [[ ! -e "$CAPSULE_CAMERA_DEVICE" ]]; then
@@ -41,8 +50,7 @@ docker run --rm -it \
   --ipc host \
   "${DEVICE_ARGS[@]}" \
   "${ARGUS_ARGS[@]}" \
-  --group-add video \
-  --group-add render \
+  "${GROUP_ARGS[@]}" \
   -e CAPSULE_MODEL="$CAPSULE_MODEL" \
   -e CAPSULE_SOURCE="$CAPSULE_SOURCE" \
   -e CAPSULE_DEVICE="$CAPSULE_DEVICE" \
@@ -51,6 +59,7 @@ docker run --rm -it \
   -e CAPSULE_IOU="$CAPSULE_IOU" \
   -e YOLO_CONFIG_DIR=/tmp/ultralytics \
   -e MPLCONFIGDIR=/tmp/matplotlib \
+  -v "$PWD/src:/app/src:ro" \
   -v "$PWD/configs:/app/configs:ro" \
   -v "$PWD/data:/app/data" \
   -v "$PWD/models:/app/models" \

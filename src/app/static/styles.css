@@ -60,6 +60,23 @@ body {
   line-height: 1;
 }
 
+.good-metric {
+  border-color: #287a4a;
+}
+
+.good-metric strong {
+  color: #4fd384;
+}
+
+.defect-metric {
+  border-color: #a53a40;
+  background: #321f24;
+}
+
+.defect-metric strong {
+  color: #ff5b61;
+}
+
 .metric-row {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -125,6 +142,17 @@ th {
 
 td {
   color: #e7edf4;
+}
+
+td.class-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+tr.defect-row td {
+  color: #ff777c;
+  font-weight: 700;
 }
 
 .controls {
