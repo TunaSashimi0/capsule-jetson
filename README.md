@@ -1,6 +1,6 @@
 # YOLO Capsule Counter
 
-This project trains and runs a rudimentary YOLO11n-OBB capsule counter for edge-device testing. The current uploaded dataset contains one class, `capsule`, with oriented bounding box labels, so this implementation counts capsules and reports each capsule's pixel width, pixel height, and image-plane rotation. Defect detection should be added later by relabeling data with defect-aware classes such as `capsule_good` and `capsule_defect`.
+This project trains and runs a YOLO11-OBB capsule detector for edge-device testing. The current dataset has two oriented-bounding-box classes: `capsule_defect` (class 0) and `capsule_good` (class 1).
 
 ## Current Dataset
 
@@ -14,19 +14,81 @@ labeled_data/
   notes.json
 ```
 
-The current OBB data audit found 29 images, 29 label files, and 93 labeled capsule boxes.
+The current OBB data audit found 157 images, 157 matching label files, and 288 labeled capsule boxes (99 defect and 189 good).
 
 ## Environment
 
-Python 3.10 or 3.11 is recommended for the ML stack. This machine currently reports Python 3.14, which may not be supported by PyTorch/Ultralytics wheels yet.
+Python 3.10 or 3.11 is recommended for the ML stack. A fresh machine needs Git,
+Git LFS, Python with `venv` support, and the OpenGL/GLib runtime libraries used
+by OpenCV. On Ubuntu/Debian, install them with:
 
-Create and activate a virtual environment:
+```bash
+sudo apt update
+sudo apt install -y git git-lfs python3 python3-venv python3-pip libgl1 libglib2.0-0
+git lfs install
+```
+
+Clone the repository and fetch the LFS-backed source images:
+
+```bash
+git clone <repository-url> capsule-jetson
+cd capsule-jetson
+git lfs pull
+```
+
+Create and activate a virtual environment on Linux/macOS:
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
+```
+
+Or on Windows PowerShell:
 
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
 ```
+
+`requirements.txt` lists every direct Python runtime dependency with bounded
+versions. PyTorch wheels are platform-specific; use the Jetson container path
+below instead of replacing NVIDIA's CUDA-enabled PyTorch with a generic wheel.
+
+## Repository Data and Models
+
+The canonical `labeled_data/` dataset is versioned because it is required to
+rebuild the prepared splits and train on a fresh checkout. Its 157 source images
+(about 531 MiB total) are stored through Git LFS; labels, class names, and
+metadata are ordinary Git files. Run `git lfs pull` after cloning.
+
+When publishing or refreshing the dataset, install Git LFS before staging it,
+then verify that the images are represented as LFS objects:
+
+```bash
+git lfs install
+git add .gitattributes
+git add --renormalize labeled_data/images
+git add labeled_data
+git lfs status
+```
+
+The following are reproducible or machine-specific and are intentionally not
+committed:
+
+- `data/prepared/`, which is regenerated from `labeled_data/`.
+- `datasets/`, which contains datasets downloaded automatically by Ultralytics.
+- `runs/`, which contains training and validation output.
+- PyTorch checkpoints and ONNX, TensorRT, TorchScript, TFLite, MNN, and similar
+  model exports.
+
+Ultralytics downloads the requested base checkpoint (for example,
+`yolo11s-obb.pt`) on the first training run. Trained weights stay local under
+`models/trained/`; store deployable weights in release or artifact storage if
+they need to be shared between machines.
 
 ## Prepare Dataset
 
@@ -48,25 +110,26 @@ data/prepared/labels/test
 ## Train
 
 ```powershell
-python -m src.capsule_yolo.train --epochs 100 --imgsz 640 --batch 4 --device 0
+python -m src.capsule_yolo.train --model yolo11s-obb.pt --epochs 100 --imgsz 640 --batch 4 --workers 0 --device 0 --name capsule_yolo11s_obb --output-model models/trained/capsule_yolo11s_obb_best.pt
 ```
 
 The YOLO run artifacts will be written under:
 
 ```text
-runs/train/capsule_yolo11n_obb/weights/
+runs/train/capsule_yolo11s_obb/weights/
 ```
 
-After training, `best.pt` is copied to the deployable, Git-tracked path:
+After training, `best.pt` is copied to the local deployable path (ignored by
+Git):
 
 ```text
-models/trained/capsule_yolo11n_obb_best.pt
+models/trained/capsule_yolo11s_obb_best.pt
 ```
 
 ## Validate
 
 ```powershell
-python -m src.capsule_yolo.validate --model models/trained/capsule_yolo11n_obb_best.pt --device 0
+python -m src.capsule_yolo.validate --model models/trained/capsule_yolo11s_obb_best.pt --device 0
 ```
 
 ## Run Video Counter
@@ -74,13 +137,13 @@ python -m src.capsule_yolo.validate --model models/trained/capsule_yolo11n_obb_b
 Use a webcam:
 
 ```powershell
-python -m src.capsule_yolo.infer_video --model models/trained/capsule_yolo11n_obb_best.pt --source 0 --device 0
+python -m src.capsule_yolo.infer_video --model models/trained/capsule_yolo11s_obb_best.pt --source 0 --device 0
 ```
 
 Use a video file:
 
 ```powershell
-python -m src.capsule_yolo.infer_video --model models/trained/capsule_yolo11n_obb_best.pt --source data/samples/test_video.mp4 --device 0
+python -m src.capsule_yolo.infer_video --model models/trained/capsule_yolo11s_obb_best.pt --source data/samples/test_video.mp4 --device 0
 ```
 
 ## Run Basic UI
@@ -192,16 +255,4 @@ If that probe reports `No cameras available`, power down and check the ribbon or
 
 Pi Camera Module 3 / IMX708 note: Raspberry Pi Camera Module 3 uses a Sony IMX708 sensor. This Jetson R39.2 image does not include an `nv_imx708` kernel module or an IMX708 Jetson-IO overlay, so it cannot be configured as a working Argus camera without installing a vendor/kernel driver and matching device-tree overlay. Raspberry Pi's upstream IMX708 overlay uses I2C address `0x1a`; the stock Jetson IMX219 overlays probe address `0x10`, so IMX219 failure logs are not proof that an IMX708 module is bad.
 
-The default trained OBB model is expected at `models/trained/capsule_yolo11n_obb_best.pt`. If that file is missing on a fresh checkout, train with the labeled data or temporarily set `CAPSULE_MODEL` to a model path that exists inside the container.
-
-## Future Defect Detection
-
-When defect examples are available, relabel the dataset with two classes:
-
-```yaml
-names:
-  0: capsule_good
-  1: capsule_defect
-```
-
-Then retrain and update the UI counters to show good and defect counts separately.
+The default trained OBB model is expected at `models/trained/capsule_yolo11n_obb_best.pt`. Model binaries are deliberately absent from a fresh checkout: train with the LFS-backed labeled data, retrieve a checkpoint from your artifact storage, or set `CAPSULE_MODEL` to a model path mounted inside the container.

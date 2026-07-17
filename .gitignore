@@ -1,19 +1,69 @@
+# Python environments and caches
 .venv/
+venv/
+env/
 __pycache__/
 *.py[cod]
+*$py.class
 .pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+build/
+dist/
+*.egg-info/
 
-runs/
-models/base/*.pt
-models/exported/*
-yolo*.pt
+# Editor and operating-system files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
 
-data/prepared/
-data/samples/*
-!data/samples/.gitkeep
-labeled_data/
-
+# Local configuration and logs
 .env
 .env.*
 !.env.jetson.example
 *.log
+
+# Generated datasets and Ultralytics download/cache directories
+/data/prepared/
+/data/samples/*
+!/data/samples/.gitkeep
+/datasets/
+*.cache
+
+# Training and validation outputs
+/runs/
+
+# Downloaded checkpoints and generated model exports. Keep model binaries in
+# release/artifact storage, not in Git; the empty directories remain tracked.
+*.pt
+*.pth
+*.ckpt
+*.safetensors
+*.onnx
+*.engine
+*.plan
+*.torchscript
+*.tflite
+*.mnn
+*.rknn
+*.pte
+*.weights
+/models/base/*
+!/models/base/.gitkeep
+/models/trained/*
+!/models/trained/.gitkeep
+/models/exported/
+*.pb
+*_saved_model/
+*_ncnn_model/
+*_openvino_model/
+*_web_model/
+*_paddle_model/
+*.mlpackage/
+/calibration_image_sample_data_*.npy
+
+# The canonical labeled_data/ source dataset is intentionally not ignored.
+# Its images are stored with Git LFS; see .gitattributes and README.md.

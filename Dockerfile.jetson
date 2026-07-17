@@ -28,18 +28,17 @@ COPY requirements.txt .
 RUN python3 - <<'PY' > /tmp/jetson-torch-constraints.txt
 import importlib.metadata as metadata
 
-required = ("torch", "torchvision", "torchaudio")
+required = ("torch", "torchvision")
 missing = []
 for package in required:
     try:
         print(f"{package}=={metadata.version(package)}")
     except metadata.PackageNotFoundError:
-        if package == "torch":
-            missing.append(package)
+        missing.append(package)
 
 if missing:
     raise SystemExit(
-        "The Jetson base image must include NVIDIA's CUDA-enabled PyTorch. "
+        "The Jetson base image must include NVIDIA's CUDA-enabled PyTorch and torchvision. "
         "Use an nvcr.io/nvidia/l4t-pytorch image matching this device's L4T release."
     )
 PY

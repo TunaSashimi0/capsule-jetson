@@ -2,7 +2,11 @@
   "categories": [
     {
       "id": 0,
-      "name": "capsule"
+      "name": "capsule_defect"
+    },
+    {
+      "id": 1,
+      "name": "capsule_good"
     }
   ],
   "info": {

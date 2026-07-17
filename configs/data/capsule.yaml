@@ -1,7 +1,8 @@
-path: /home/tuna/Desktop/proj/YOLO-capsule/data/prepared
+path: /home/tuna/capsule-jetson/data/prepared
 train: images/train
 val: images/val
 test: images/test
 
 names:
-  0: capsule
+  0: "capsule_defect"
+  1: "capsule_good"

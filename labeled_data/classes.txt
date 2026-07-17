@@ -1,1 +1,2 @@
-capsule
+capsule_defect
+capsule_good
