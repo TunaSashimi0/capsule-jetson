@@ -8,21 +8,39 @@ from typing import Generator
 
 import cv2
 import numpy as np
+import torch
 from ultralytics import YOLO
 
+from src.capsule_yolo.config import DEFAULT_MODEL_IMGSZ
 from src.capsule_yolo.counting import CountSummary, summarize_result
 from src.capsule_yolo.drawing import annotated_frame, draw_status_panel
-from src.capsule_yolo.video_source import open_video_capture
+from src.capsule_yolo.video_source import (
+    DEFAULT_CAPTURE_FPS,
+    DEFAULT_CAPTURE_HEIGHT,
+    DEFAULT_CAPTURE_WIDTH,
+    DEFAULT_ANALOG_GAIN,
+    DEFAULT_DIGITAL_GAIN,
+    DEFAULT_EXPOSURE_US,
+    open_video_capture,
+)
 
 
 @dataclass
 class CounterSettings:
     model: str
     source: str = "0"
-    imgsz: int = 640
+    imgsz: int = DEFAULT_MODEL_IMGSZ
     conf: float = 0.25
     iou: float = 0.7
     device: str | None = None
+    capture_width: int = DEFAULT_CAPTURE_WIDTH
+    capture_height: int = DEFAULT_CAPTURE_HEIGHT
+    capture_fps: int = DEFAULT_CAPTURE_FPS
+    jpeg_quality: int = 95
+    exposure_us: int = DEFAULT_EXPOSURE_US
+    analog_gain: float = DEFAULT_ANALOG_GAIN
+    digital_gain: float = DEFAULT_DIGITAL_GAIN
+    half: bool = True
 
 
 @dataclass
@@ -40,6 +58,11 @@ class CounterStats:
     source: str = "0"
     conf: float = 0.25
     frame_time: float = 0.0
+    frame_width: int = 0
+    frame_height: int = 0
+    highlight_clip_pct: float = 0.0
+    mean_luma: float = 0.0
+    precision: str = "FP32"
 
 
 class VideoWorker:
@@ -106,8 +129,18 @@ class VideoWorker:
             self._set_placeholder(f"Model load failed: {exc}", settings)
             return
 
+        use_half = settings.half and torch.cuda.is_available() and str(settings.device).lower() != "cpu"
+
         try:
-            capture, source_spec = open_video_capture(settings.source)
+            capture, source_spec = open_video_capture(
+                settings.source,
+                width=settings.capture_width,
+                height=settings.capture_height,
+                framerate=settings.capture_fps,
+                exposure_us=settings.exposure_us,
+                analog_gain=settings.analog_gain,
+                digital_gain=settings.digital_gain,
+            )
         except Exception as exc:
             self._set_placeholder(f"Source setup failed: {exc}", settings)
             return
@@ -124,12 +157,15 @@ class VideoWorker:
                     self._set_placeholder(f"No frames from source: {settings.source}", settings)
                     break
 
+                highlight_clip_pct = float(np.mean(np.max(frame, axis=2) >= 250) * 100.0)
+                mean_luma = float(np.mean(cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)))
                 result = model.predict(
                     frame,
                     imgsz=settings.imgsz,
                     conf=settings.conf,
                     iou=settings.iou,
                     device=settings.device,
+                    quantize=16 if use_half else 32,
                     verbose=False,
                 )[0]
                 summary = summarize_result(result)
@@ -146,7 +182,8 @@ class VideoWorker:
                     conf=settings.conf,
                     source_label=source_spec.label or settings.source,
                 )
-                jpeg = self._encode_jpeg(frame_out)
+                frame_height, frame_width = frame_out.shape[:2]
+                jpeg = self._encode_jpeg(frame_out, quality=settings.jpeg_quality)
                 with self._lock:
                     self._latest_jpeg = jpeg
                     self._stats = CounterStats(
@@ -163,6 +200,11 @@ class VideoWorker:
                         source=settings.source,
                         conf=settings.conf,
                         frame_time=now,
+                        frame_width=frame_width,
+                        frame_height=frame_height,
+                        highlight_clip_pct=highlight_clip_pct,
+                        mean_luma=mean_luma,
+                        precision="FP16" if use_half else "FP32",
                     )
         except Exception as exc:
             self._set_placeholder(f"Inference failed: {exc}", settings)
@@ -190,8 +232,9 @@ class VideoWorker:
         return self._encode_jpeg(frame)
 
     @staticmethod
-    def _encode_jpeg(frame: np.ndarray) -> bytes:
-        ok, encoded = cv2.imencode(".jpg", frame, [int(cv2.IMWRITE_JPEG_QUALITY), 82])
+    def _encode_jpeg(frame: np.ndarray, quality: int = 95) -> bytes:
+        quality = max(1, min(100, quality))
+        ok, encoded = cv2.imencode(".jpg", frame, [int(cv2.IMWRITE_JPEG_QUALITY), quality])
         if not ok:
             raise RuntimeError("Failed to encode frame as JPEG")
         return encoded.tobytes()

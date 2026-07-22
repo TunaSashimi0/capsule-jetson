@@ -178,6 +178,22 @@ input {
   font-size: 14px;
 }
 
+.checkbox-control {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 38px;
+}
+
+.checkbox-control input {
+  width: 18px;
+  height: 18px;
+}
+
+.checkbox-control span {
+  margin: 0;
+}
+
 .actions {
   display: grid;
   grid-template-columns: 1fr 1fr;

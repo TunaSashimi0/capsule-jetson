@@ -92,8 +92,43 @@
 
           <div class="control-grid">
             <label>
-              <span>Image size</span>
+              <span>Model input size</span>
               <input name="imgsz" type="number" min="320" step="32" value="{{ settings.imgsz }}">
+            </label>
+
+            <label>
+              <span>Capture width</span>
+              <input name="capture_width" type="number" min="320" step="1" value="{{ settings.capture_width }}">
+            </label>
+
+            <label>
+              <span>Capture height</span>
+              <input name="capture_height" type="number" min="240" step="1" value="{{ settings.capture_height }}">
+            </label>
+
+            <label>
+              <span>Capture FPS</span>
+              <input name="capture_fps" type="number" min="1" max="120" step="1" value="{{ settings.capture_fps }}">
+            </label>
+
+            <label>
+              <span>Exposure (us, 0=auto)</span>
+              <input name="exposure_us" type="number" min="0" step="100" value="{{ settings.exposure_us }}">
+            </label>
+
+            <label>
+              <span>Analog gain</span>
+              <input name="analog_gain" type="number" min="0" max="32" step="0.1" value="{{ settings.analog_gain }}">
+            </label>
+
+            <label>
+              <span>Digital gain</span>
+              <input name="digital_gain" type="number" min="0" max="256" step="0.1" value="{{ settings.digital_gain }}">
+            </label>
+
+            <label class="checkbox-control">
+              <input name="half" type="checkbox" {% if settings.half %}checked{% endif %}>
+              <span>FP16 CUDA</span>
             </label>
 
             <label>
@@ -149,8 +184,17 @@
         avgWidthEl.textContent = Number(data.avg_width_px ?? 0).toFixed(1);
         avgHeightEl.textContent = Number(data.avg_height_px ?? 0).toFixed(1);
         avgAngleEl.textContent = Number(data.avg_angle_deg ?? 0).toFixed(1);
-        modelEl.textContent = data.model_exists ? "Ready" : "Missing";
-        statusEl.textContent = data.status ?? "idle";
+        modelEl.textContent = data.model_exists ? (data.precision || "Ready") : "Missing";
+        const resolution = data.frame_width && data.frame_height
+          ? ` · ${data.frame_width}×${data.frame_height}`
+          : "";
+        const clipping = data.frame_width
+          ? ` · clipped ${Number(data.highlight_clip_pct ?? 0).toFixed(2)}%`
+          : "";
+        const brightness = data.frame_width
+          ? ` · luma ${Number(data.mean_luma ?? 0).toFixed(1)}`
+          : "";
+        statusEl.textContent = `${data.status ?? "idle"}${resolution}${clipping}${brightness}`;
 
         const measurements = data.measurements ?? [];
         if (!measurements.length) {
@@ -179,6 +223,7 @@
       form.addEventListener("submit", async (event) => {
         event.preventDefault();
         const payload = Object.fromEntries(new FormData(form).entries());
+        payload.half = form.elements.half.checked;
         await fetch("/settings", {
           method: "POST",
           headers: { "Content-Type": "application/json" },

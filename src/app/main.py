@@ -15,7 +15,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from src.capsule_yolo.config import DEFAULT_TRAINED_MODEL, PROJECT_ROOT
+from src.capsule_yolo.config import DEFAULT_MODEL_IMGSZ, DEFAULT_TRAINED_MODEL, PROJECT_ROOT
 from src.app.video_worker import CounterSettings, VideoWorker
 
 
@@ -27,10 +27,18 @@ worker = VideoWorker()
 settings = CounterSettings(
     model=os.getenv("CAPSULE_MODEL", str(DEFAULT_TRAINED_MODEL)),
     source=os.getenv("CAPSULE_SOURCE", "0"),
-    imgsz=int(os.getenv("CAPSULE_IMGSZ", "640")),
+    imgsz=int(os.getenv("CAPSULE_IMGSZ", str(DEFAULT_MODEL_IMGSZ))),
     conf=float(os.getenv("CAPSULE_CONF", "0.25")),
     iou=float(os.getenv("CAPSULE_IOU", "0.7")),
     device=os.getenv("CAPSULE_DEVICE", "0") or None,
+    capture_width=int(os.getenv("CAPSULE_CAPTURE_WIDTH", "1920")),
+    capture_height=int(os.getenv("CAPSULE_CAPTURE_HEIGHT", "1080")),
+    capture_fps=int(os.getenv("CAPSULE_CAPTURE_FPS", "30")),
+    jpeg_quality=int(os.getenv("CAPSULE_JPEG_QUALITY", "95")),
+    exposure_us=int(os.getenv("CAPSULE_EXPOSURE_US", "8000")),
+    analog_gain=float(os.getenv("CAPSULE_ANALOG_GAIN", "1.0")),
+    digital_gain=float(os.getenv("CAPSULE_DIGITAL_GAIN", "1.0")),
+    half=os.getenv("CAPSULE_HALF", "true").strip().lower() in {"1", "true", "yes", "on"},
 )
 
 
@@ -71,6 +79,20 @@ async def update_settings(request: Request) -> JSONResponse:
         conf=float(payload.get("conf") or settings.conf),
         iou=float(payload.get("iou") or settings.iou),
         device=(str(payload.get("device")) if payload.get("device") else None),
+        capture_width=int(payload.get("capture_width") or settings.capture_width),
+        capture_height=int(payload.get("capture_height") or settings.capture_height),
+        capture_fps=int(payload.get("capture_fps") or settings.capture_fps),
+        jpeg_quality=settings.jpeg_quality,
+        exposure_us=(
+            int(payload["exposure_us"]) if "exposure_us" in payload else settings.exposure_us
+        ),
+        analog_gain=(
+            float(payload["analog_gain"]) if "analog_gain" in payload else settings.analog_gain
+        ),
+        digital_gain=(
+            float(payload["digital_gain"]) if "digital_gain" in payload else settings.digital_gain
+        ),
+        half=bool(payload.get("half", settings.half)),
     )
     worker.restart(settings)
     return JSONResponse({"ok": True, "settings": settings.__dict__})

@@ -110,8 +110,12 @@ data/prepared/labels/test
 ## Train
 
 ```powershell
-python -m src.capsule_yolo.train --model yolo11s-obb.pt --epochs 100 --imgsz 640 --batch 4 --workers 0 --device 0 --name capsule_yolo11s_obb --output-model models/trained/capsule_yolo11s_obb_best.pt
+python -m src.capsule_yolo.train --model yolo11s-obb.pt --epochs 100 --imgsz 1280 --batch 4 --workers 0 --device 0 --name capsule_yolo11s_obb --output-model models/trained/capsule_yolo11s_obb_best.pt
 ```
+
+CUDA training uses automatic mixed precision by default (`--amp`), retaining
+FP32 master weights while running eligible operations in FP16. Use `--no-amp`
+only for precision troubleshooting.
 
 The YOLO run artifacts will be written under:
 
@@ -131,6 +135,23 @@ models/trained/capsule_yolo11s_obb_best.pt
 ```powershell
 python -m src.capsule_yolo.validate --model models/trained/capsule_yolo11s_obb_best.pt --device 0
 ```
+
+## Export FP16
+
+FP16 export is the default. Create a portable FP16 ONNX model with:
+
+```powershell
+python -m src.capsule_yolo.export_model --format onnx --device 0
+```
+
+Build TensorRT engines on the target NVIDIA device because engine files are
+specific to its TensorRT/CUDA stack:
+
+```bash
+python -m src.capsule_yolo.export_model --format engine --device 0
+```
+
+Use `--no-half` only when an FP32 export is explicitly required.
 
 ## Run Video Counter
 
@@ -160,14 +181,30 @@ http://localhost:8000
 
 The UI streams annotated video and shows live capsule count, FPS, model path, confidence threshold, source, average OBB dimensions, average rotation, and a per-capsule measurement table.
 
+Camera capture defaults to 1920x1080 at 30 FPS and the browser stream uses JPEG
+quality 95. These settings are independent from `CAPSULE_IMGSZ`: YOLO resizes the
+full-resolution frame internally for inference while the UI keeps the original
+capture resolution. The camera may negotiate a different mode; the UI status
+shows the actual frame dimensions. Override the request with
+`CAPSULE_CAPTURE_WIDTH`, `CAPSULE_CAPTURE_HEIGHT`, and `CAPSULE_CAPTURE_FPS`.
+
+Shiny capsules use a conservative manual camera baseline of 8000 microseconds
+with analog and ISP digital gain fixed at 1.0. Tune these values in the web UI
+or with `CAPSULE_EXPOSURE_US`, `CAPSULE_ANALOG_GAIN`, and
+`CAPSULE_DIGITAL_GAIN`. Set exposure to `0` to restore automatic exposure.
+The UI reports both mean luma (0-255) and the percentage of pixels with at
+least one clipped color channel. As a starting point, target mean luma around
+80-140 while keeping clipping below 0.5%. Camera controls are backend-dependent, so unsupported USB
+cameras may ignore one or more requested values.
+
 
 ## CUDA Smoke Test
 
 For a quick Jetson GPU check without committing a model, run a short 3-epoch smoke test:
 
 ```bash
-.venv/bin/yolo obb train model=yolo11n-obb.pt data=configs/data/capsule.yaml epochs=3 imgsz=640 batch=4 workers=0 device=0 project=runs/train name=cuda_smoke_3ep exist_ok=True
-.venv/bin/yolo obb predict model=runs/obb/runs/train/cuda_smoke_3ep/weights/best.pt source=data/prepared/images/test imgsz=640 device=0 save=False
+.venv/bin/yolo obb train model=yolo11n-obb.pt data=configs/data/capsule.yaml epochs=3 imgsz=1280 batch=4 workers=0 device=0 project=runs/train name=cuda_smoke_3ep exist_ok=True
+.venv/bin/yolo obb predict model=runs/obb/runs/train/cuda_smoke_3ep/weights/best.pt source=data/prepared/images/test imgsz=1280 device=0 save=False
 ```
 
 The output should report `CUDA:0 (Orin, ...)` and nonzero `GPU_mem` during training.
@@ -213,10 +250,19 @@ http://<jetson-hostname-or-ip>:8000
 Useful `.env.jetson` settings:
 
 ```text
-CAPSULE_MODEL=/app/models/trained/capsule_yolo11n_obb_best.pt
+CAPSULE_MODEL=/app/models/trained/capsule_yolo11s_obb_best.pt
 CAPSULE_SOURCE=csi:0
 CAPSULE_CAMERA_DEVICE=/dev/video0
 CAPSULE_DEVICE=0
+CAPSULE_IMGSZ=1280
+CAPSULE_CAPTURE_WIDTH=1920
+CAPSULE_CAPTURE_HEIGHT=1080
+CAPSULE_CAPTURE_FPS=30
+CAPSULE_JPEG_QUALITY=95
+CAPSULE_EXPOSURE_US=8000
+CAPSULE_ANALOG_GAIN=1.0
+CAPSULE_DIGITAL_GAIN=1.0
+CAPSULE_HALF=true
 ```
 
 Camera source values:
@@ -255,4 +301,4 @@ If that probe reports `No cameras available`, power down and check the ribbon or
 
 Pi Camera Module 3 / IMX708 note: Raspberry Pi Camera Module 3 uses a Sony IMX708 sensor. This Jetson R39.2 image does not include an `nv_imx708` kernel module or an IMX708 Jetson-IO overlay, so it cannot be configured as a working Argus camera without installing a vendor/kernel driver and matching device-tree overlay. Raspberry Pi's upstream IMX708 overlay uses I2C address `0x1a`; the stock Jetson IMX219 overlays probe address `0x10`, so IMX219 failure logs are not proof that an IMX708 module is bad.
 
-The default trained OBB model is expected at `models/trained/capsule_yolo11n_obb_best.pt`. Model binaries are deliberately absent from a fresh checkout: train with the LFS-backed labeled data, retrieve a checkpoint from your artifact storage, or set `CAPSULE_MODEL` to a model path mounted inside the container.
+The default trained OBB model is expected at `models/trained/capsule_yolo11s_obb_best.pt`. Model binaries are deliberately absent from a fresh checkout: train with the LFS-backed labeled data, retrieve a checkpoint from your artifact storage, or set `CAPSULE_MODEL` to a model path mounted inside the container.
