@@ -16,7 +16,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from src.capsule_yolo.config import DEFAULT_TRAINED_MODEL, PROJECT_ROOT
+from src.capsule_yolo.config import DEFAULT_MODEL_IMGSZ, DEFAULT_TRAINED_MODEL, PROJECT_ROOT
 from src.capsule_yolo.solenoid import SolenoidCycleController, SolenoidSettings
 from src.app.video_worker import CounterSettings, VideoWorker
 
@@ -33,7 +33,7 @@ settings = CounterSettings(
     model=os.getenv("CAPSULE_MODEL", str(DEFAULT_TRAINED_MODEL)),
     source=os.getenv("CAPSULE_SOURCE", "csi:0"),
     secondary_source=os.getenv("CAPSULE_SECONDARY_SOURCE", "csi:1") or None,
-    imgsz=int(os.getenv("CAPSULE_IMGSZ", "1280")),
+    imgsz=int(os.getenv("CAPSULE_IMGSZ", str(DEFAULT_MODEL_IMGSZ))),
     conf=float(os.getenv("CAPSULE_CONF", "0.25")),
     iou=float(os.getenv("CAPSULE_IOU", "0.7")),
     device=os.getenv("CAPSULE_DEVICE", "0") or None,
@@ -44,6 +44,10 @@ settings = CounterSettings(
     preview_fps=float(os.getenv("CAPSULE_PREVIEW_FPS", "2")),
     preview_jpeg_quality=int(os.getenv("CAPSULE_PREVIEW_JPEG_QUALITY", "84")),
     autofocus=env_bool("CAPSULE_AUTOFOCUS", True),
+    exposure_us=int(os.getenv("CAPSULE_EXPOSURE_US", "8000")),
+    analog_gain=float(os.getenv("CAPSULE_ANALOG_GAIN", "1.0")),
+    digital_gain=float(os.getenv("CAPSULE_DIGITAL_GAIN", "1.0")),
+    half=env_bool("CAPSULE_HALF", True),
 )
 solenoid_settings = SolenoidSettings(
     enabled=env_bool("CAPSULE_SOLENOID_ENABLED", False),
@@ -144,6 +148,16 @@ async def update_settings(request: Request) -> JSONResponse:
             payload.get("preview_jpeg_quality") or settings.preview_jpeg_quality
         ),
         autofocus=str(payload.get("autofocus", "false")).lower() in {"1", "true", "yes", "on"},
+        exposure_us=(
+            int(payload["exposure_us"]) if "exposure_us" in payload else settings.exposure_us
+        ),
+        analog_gain=(
+            float(payload["analog_gain"]) if "analog_gain" in payload else settings.analog_gain
+        ),
+        digital_gain=(
+            float(payload["digital_gain"]) if "digital_gain" in payload else settings.digital_gain
+        ),
+        half=bool(payload.get("half", settings.half)),
     )
     solenoid_controller.stop()
     worker.restart(settings)

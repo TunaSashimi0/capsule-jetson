@@ -10,12 +10,20 @@ from typing import AsyncGenerator
 
 import cv2
 import numpy as np
+import torch
 from ultralytics import YOLO
 
 from src.capsule_yolo.arducam_focus import autofocus_capture, focus_bus_for_sensor, set_focus
+from src.capsule_yolo.config import DEFAULT_MODEL_IMGSZ
 from src.capsule_yolo.counting import CountSummary, summarize_result
 from src.capsule_yolo.drawing import draw_status_panel, lightweight_preview
-from src.capsule_yolo.video_source import VideoSourceSpec, open_video_capture
+from src.capsule_yolo.video_source import (
+    DEFAULT_ANALOG_GAIN,
+    DEFAULT_DIGITAL_GAIN,
+    DEFAULT_EXPOSURE_US,
+    VideoSourceSpec,
+    open_video_capture,
+)
 
 
 @dataclass
@@ -23,7 +31,7 @@ class CounterSettings:
     model: str
     source: str = "csi:0"
     secondary_source: str | None = "csi:1"
-    imgsz: int = 1280
+    imgsz: int = DEFAULT_MODEL_IMGSZ
     conf: float = 0.25
     iou: float = 0.7
     device: str | None = None
@@ -34,6 +42,10 @@ class CounterSettings:
     preview_fps: float = 2.0
     preview_jpeg_quality: int = 84
     autofocus: bool = True
+    exposure_us: int = DEFAULT_EXPOSURE_US
+    analog_gain: float = DEFAULT_ANALOG_GAIN
+    digital_gain: float = DEFAULT_DIGITAL_GAIN
+    half: bool = True
 
     def sources(self) -> tuple[str, ...]:
         values = [self.source]
@@ -63,6 +75,8 @@ class CameraStats:
     focus_position: int | None = None
     focus_score_ratio: float | None = None
     inference_count: int = 0
+    highlight_clip_pct: float = 0.0
+    mean_luma: float = 0.0
 
 
 @dataclass
@@ -87,6 +101,11 @@ class CounterStats:
     preview_width: int = 1280
     preview_fps: float = 2.0
     inference_count: int = 0
+    frame_width: int = 0
+    frame_height: int = 0
+    highlight_clip_pct: float = 0.0
+    mean_luma: float = 0.0
+    precision: str = "FP32"
 
 
 @dataclass(frozen=True)
@@ -225,6 +244,11 @@ class VideoWorker:
             self._set_placeholders(f"Model load failed: {exc}", settings)
             return
 
+        use_half = (
+            settings.half
+            and torch.cuda.is_available()
+            and str(settings.device).lower() != "cpu"
+        )
         captures: list[cv2.VideoCapture] = []
         specs: list[VideoSourceSpec] = []
         try:
@@ -236,6 +260,9 @@ class VideoWorker:
                     width=settings.capture_width,
                     height=settings.capture_height,
                     framerate=settings.capture_fps,
+                    exposure_us=settings.exposure_us,
+                    analog_gain=settings.analog_gain,
+                    digital_gain=settings.digital_gain,
                 )
                 if not capture.isOpened():
                     capture.release()
@@ -283,6 +310,7 @@ class VideoWorker:
                         conf=settings.conf,
                         iou=settings.iou,
                         device=settings.device,
+                        half=use_half,
                         verbose=False,
                     )[0]
                     summary = summarize_result(result)
@@ -343,6 +371,9 @@ class VideoWorker:
                     width=settings.capture_width,
                     height=settings.capture_height,
                     framerate=settings.capture_fps,
+                    exposure_us=settings.exposure_us,
+                    analog_gain=settings.analog_gain,
+                    digital_gain=settings.digital_gain,
                 )
                 if not replacement.isOpened():
                     replacement.release()
@@ -502,6 +533,8 @@ class VideoWorker:
             focus_position=previous.focus_position,
             focus_score_ratio=previous.focus_score_ratio,
             inference_count=previous.inference_count + 1,
+            highlight_clip_pct=float(np.mean(np.max(frame, axis=2) >= 250) * 100.0),
+            mean_luma=float(np.mean(cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY))),
         )
 
     def _publish(
@@ -558,6 +591,23 @@ class VideoWorker:
             preview_width=settings.preview_width,
             preview_fps=settings.preview_fps,
             inference_count=sum(item.inference_count for item in cameras),
+            frame_width=max((item.frame_width for item in cameras), default=0),
+            frame_height=max((item.frame_height for item in cameras), default=0),
+            highlight_clip_pct=(
+                sum(item.highlight_clip_pct for item in cameras) / len(cameras)
+                if cameras
+                else 0.0
+            ),
+            mean_luma=(
+                sum(item.mean_luma for item in cameras) / len(cameras) if cameras else 0.0
+            ),
+            precision=(
+                "FP16"
+                if settings.half
+                and torch.cuda.is_available()
+                and str(settings.device).lower() != "cpu"
+                else "FP32"
+            ),
         )
 
     def _set_placeholders(

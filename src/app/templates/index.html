@@ -81,6 +81,9 @@
             <label>Capture width <input name="capture_width" type="number" min="640" value="{{ settings.capture_width }}"></label>
             <label>Capture height <input name="capture_height" type="number" min="480" value="{{ settings.capture_height }}"></label>
             <label>Capture FPS <input name="capture_fps" type="number" min="1" max="60" value="{{ settings.capture_fps }}"></label>
+            <label>Exposure (µs, 0=auto) <input name="exposure_us" type="number" min="0" step="100" value="{{ settings.exposure_us }}"></label>
+            <label>Analog gain <input name="analog_gain" type="number" min="0" max="32" step="0.1" value="{{ settings.analog_gain }}"></label>
+            <label>Digital gain <input name="digital_gain" type="number" min="0" max="256" step="0.1" value="{{ settings.digital_gain }}"></label>
             <label>YOLO size <input name="imgsz" type="number" min="320" step="32" value="{{ settings.imgsz }}"></label>
             <label>Review width <input name="preview_width" type="number" min="640" value="{{ settings.preview_width }}"></label>
             <label>Review FPS <input name="preview_fps" type="number" min="0.5" max="10" step="0.5" value="{{ settings.preview_fps }}"></label>
@@ -88,6 +91,7 @@
             <label>Confidence <input name="conf" type="number" min="0.01" max="1" step="0.01" value="{{ settings.conf }}"></label>
             <label>IoU <input name="iou" type="number" min="0.01" max="1" step="0.01" value="{{ settings.iou }}"></label>
             <label>Device <input name="device" value="{{ settings.device or '' }}"></label>
+            <label class="check"><input id="half" name="half" type="checkbox" {% if settings.half %}checked{% endif %}> FP16 CUDA</label>
             <label class="check"><input id="autofocus" name="autofocus" type="checkbox" {% if settings.autofocus %}checked{% endif %}> Autofocus on start</label>
             <button type="submit">Apply and refocus</button>
           </form>
@@ -134,8 +138,10 @@
           byId("good-count").textContent = data.good_count ?? 0;
           byId("defect-count").textContent = data.defect_count ?? 0;
           byId("fps").textContent = Number(data.fps ?? 0).toFixed(1);
-          byId("status").textContent = data.status ?? "idle";
-          byId("model-state").textContent = data.model_exists ? "ready" : "missing";
+          const clipping = Number(data.highlight_clip_pct ?? 0).toFixed(2);
+          const luma = Number(data.mean_luma ?? 0).toFixed(1);
+          byId("status").textContent = `${data.status ?? "idle"} · clipped ${clipping}% · luma ${luma}`;
+          byId("model-state").textContent = data.model_exists ? (data.precision || "ready") : "missing";
           byId("capture-resolution").textContent = `${data.capture_width ?? 0} × ${data.capture_height ?? 0}`;
           byId("inference-width").textContent = data.inference_width ?? 0;
           byId("preview-state").textContent = previewWanted
@@ -239,6 +245,7 @@
         event.preventDefault();
         const payload = Object.fromEntries(new FormData(form).entries());
         payload.autofocus = byId("autofocus").checked;
+        payload.half = byId("half").checked;
         await fetch("/settings", {
           method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload)
         });

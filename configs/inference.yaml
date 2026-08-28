@@ -1,7 +1,8 @@
-model: models/trained/capsule_yolo11n_obb_best.pt
+model: models/trained/capsule_yolo11s_obb_best.pt
 source: 0
-imgsz: 640
+imgsz: 1280
 conf: 0.25
 iou: 0.7
 device: 0
+half: true
 show: true

@@ -7,20 +7,45 @@ from pathlib import Path
 import cv2
 from ultralytics import YOLO
 
-from .config import DEFAULT_DEVICE, DEFAULT_TRAINED_MODEL
+from .config import DEFAULT_DEVICE, DEFAULT_MODEL_IMGSZ, DEFAULT_TRAINED_MODEL
 from .counting import summarize_result
 from .drawing import annotated_frame
-from .video_source import open_video_capture
+from .video_source import (
+    DEFAULT_ANALOG_GAIN,
+    DEFAULT_CAPTURE_FPS,
+    DEFAULT_CAPTURE_HEIGHT,
+    DEFAULT_CAPTURE_WIDTH,
+    DEFAULT_DIGITAL_GAIN,
+    DEFAULT_EXPOSURE_US,
+    open_video_capture,
+)
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Run real-time capsule counting on video or camera input.")
     parser.add_argument("--model", default=str(DEFAULT_TRAINED_MODEL), help="Model checkpoint path.")
     parser.add_argument("--source", default="0", help="Camera index, csi:0/cam0, video file, or stream URL.")
-    parser.add_argument("--imgsz", type=int, default=640, help="Inference image size.")
+    parser.add_argument("--imgsz", type=int, default=DEFAULT_MODEL_IMGSZ, help="Inference image size.")
     parser.add_argument("--conf", type=float, default=0.25, help="Confidence threshold.")
     parser.add_argument("--iou", type=float, default=0.7, help="NMS IoU threshold.")
     parser.add_argument("--device", default=DEFAULT_DEVICE, help="Device such as 0, cpu, cuda:0.")
+    parser.add_argument(
+        "--half",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Use FP16 CUDA inference by default.",
+    )
+    parser.add_argument("--capture-width", type=int, default=DEFAULT_CAPTURE_WIDTH, help="Requested camera width.")
+    parser.add_argument("--capture-height", type=int, default=DEFAULT_CAPTURE_HEIGHT, help="Requested camera height.")
+    parser.add_argument("--capture-fps", type=int, default=DEFAULT_CAPTURE_FPS, help="Requested camera FPS.")
+    parser.add_argument(
+        "--exposure-us",
+        type=int,
+        default=DEFAULT_EXPOSURE_US,
+        help="Manual camera exposure in microseconds; use 0 for auto exposure.",
+    )
+    parser.add_argument("--analog-gain", type=float, default=DEFAULT_ANALOG_GAIN, help="Requested analog gain.")
+    parser.add_argument("--digital-gain", type=float, default=DEFAULT_DIGITAL_GAIN, help="Requested CSI ISP gain.")
     parser.add_argument("--hide-window", action="store_true", help="Run without opening a preview window.")
     parser.add_argument("--output", default=None, help="Optional annotated video output path.")
     return parser
@@ -42,7 +67,15 @@ def main() -> None:
     # TensorRT engine filenames do not encode the Ultralytics task, so declare
     # OBB explicitly instead of letting engine loading fall back to detection.
     model = YOLO(args.model, task="obb")
-    capture, source_spec = open_video_capture(args.source)
+    capture, source_spec = open_video_capture(
+        args.source,
+        width=args.capture_width,
+        height=args.capture_height,
+        framerate=args.capture_fps,
+        exposure_us=args.exposure_us,
+        analog_gain=args.analog_gain,
+        digital_gain=args.digital_gain,
+    )
     source_label = source_spec.label or str(args.source)
     if not capture.isOpened():
         raise RuntimeError(f"Could not open video source: {args.source}")
@@ -63,6 +96,7 @@ def main() -> None:
                 conf=args.conf,
                 iou=args.iou,
                 device=args.device,
+                quantize=16 if args.half else 32,
                 verbose=False,
             )[0]
             summary = summarize_result(result)

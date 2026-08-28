@@ -11,11 +11,15 @@ services:
     runtime: nvidia
     ipc: host
     environment:
-      CAPSULE_MODEL: ${CAPSULE_MODEL:-/app/models/trained/capsule_yolo11n_obb_best.pt}
+      CAPSULE_MODEL: ${CAPSULE_MODEL:-/app/models/trained/capsule_yolo11s_obb_best.pt}
       CAPSULE_SOURCE: ${CAPSULE_SOURCE:-csi:0}
       CAPSULE_SECONDARY_SOURCE: ${CAPSULE_SECONDARY_SOURCE:-csi:1}
       CAPSULE_DEVICE: ${CAPSULE_DEVICE:-0}
       CAPSULE_IMGSZ: ${CAPSULE_IMGSZ:-1280}
+      CAPSULE_EXPOSURE_US: ${CAPSULE_EXPOSURE_US:-8000}
+      CAPSULE_ANALOG_GAIN: ${CAPSULE_ANALOG_GAIN:-1.0}
+      CAPSULE_DIGITAL_GAIN: ${CAPSULE_DIGITAL_GAIN:-1.0}
+      CAPSULE_HALF: ${CAPSULE_HALF:-true}
       CAPSULE_CONF: ${CAPSULE_CONF:-0.25}
       CAPSULE_IOU: ${CAPSULE_IOU:-0.7}
       CAPSULE_CAPTURE_WIDTH: ${CAPSULE_CAPTURE_WIDTH:-3280}

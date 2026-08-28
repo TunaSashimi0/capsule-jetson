@@ -110,8 +110,12 @@ data/prepared/labels/test
 ## Train
 
 ```powershell
-python -m src.capsule_yolo.train --model yolo11s-obb.pt --epochs 100 --imgsz 640 --batch 4 --workers 0 --device 0 --name capsule_yolo11s_obb --output-model models/trained/capsule_yolo11s_obb_best.pt
+python -m src.capsule_yolo.train --model yolo11s-obb.pt --epochs 100 --imgsz 1280 --batch 4 --workers 0 --device 0 --name capsule_yolo11s_obb --output-model models/trained/capsule_yolo11s_obb_best.pt
 ```
+
+CUDA training uses automatic mixed precision by default (`--amp`), retaining
+FP32 master weights while running eligible operations in FP16. Use `--no-amp`
+only for precision troubleshooting.
 
 The YOLO run artifacts will be written under:
 
@@ -131,6 +135,23 @@ models/trained/capsule_yolo11s_obb_best.pt
 ```powershell
 python -m src.capsule_yolo.validate --model models/trained/capsule_yolo11s_obb_best.pt --device 0
 ```
+
+## Export FP16
+
+FP16 export is the default. Create a portable FP16 ONNX model with:
+
+```powershell
+python -m src.capsule_yolo.export_model --format onnx --device 0
+```
+
+Build TensorRT engines on the target NVIDIA device because engine files are
+specific to its TensorRT/CUDA stack:
+
+```bash
+python -m src.capsule_yolo.export_model --format engine --device 0
+```
+
+Use `--no-half` only when an FP32 export is explicitly required.
 
 ## Run Video Counter
 
@@ -160,14 +181,20 @@ http://localhost:8000
 
 The UI streams annotated video and shows live capsule count, FPS, model path, confidence threshold, source, average OBB dimensions, average rotation, and a per-capsule measurement table.
 
+The camera controls expose capture resolution, exposure, analog gain, and ISP
+digital gain independently from `CAPSULE_IMGSZ`. For shiny capsules, start at
+8000 microseconds with both gains at 1.0, then tune toward mean luma 80–140
+while keeping reported clipping below 0.5%. Unsupported USB camera controls may
+be ignored by their backend.
+
 
 ## CUDA Smoke Test
 
 For a quick Jetson GPU check without committing a model, run a short 3-epoch smoke test:
 
 ```bash
-.venv/bin/yolo obb train model=yolo11n-obb.pt data=configs/data/capsule.yaml epochs=3 imgsz=640 batch=4 workers=0 device=0 project=runs/train name=cuda_smoke_3ep exist_ok=True
-.venv/bin/yolo obb predict model=runs/obb/runs/train/cuda_smoke_3ep/weights/best.pt source=data/prepared/images/test imgsz=640 device=0 save=False
+.venv/bin/yolo obb train model=yolo11n-obb.pt data=configs/data/capsule.yaml epochs=3 imgsz=1280 batch=4 workers=0 device=0 project=runs/train name=cuda_smoke_3ep exist_ok=True
+.venv/bin/yolo obb predict model=runs/obb/runs/train/cuda_smoke_3ep/weights/best.pt source=data/prepared/images/test imgsz=1280 device=0 save=False
 ```
 
 The output should report `CUDA:0 (Orin, ...)` and nonzero `GPU_mem` during training.
@@ -213,7 +240,7 @@ http://<jetson-hostname-or-ip>:8000
 Useful `.env.jetson` settings:
 
 ```text
-CAPSULE_MODEL=/app/models/trained/capsule_yolo11n_obb_best.pt
+CAPSULE_MODEL=/app/models/trained/capsule_yolo11s_obb_best.pt
 CAPSULE_SOURCE=csi:0
 CAPSULE_SECONDARY_SOURCE=csi:1
 CAPSULE_DEVICE=0
@@ -221,6 +248,10 @@ CAPSULE_IMGSZ=1280
 CAPSULE_CAPTURE_WIDTH=3280
 CAPSULE_CAPTURE_HEIGHT=2464
 CAPSULE_CAPTURE_FPS=21
+CAPSULE_EXPOSURE_US=8000
+CAPSULE_ANALOG_GAIN=1.0
+CAPSULE_DIGITAL_GAIN=1.0
+CAPSULE_HALF=true
 CAPSULE_PREVIEW_WIDTH=1280
 CAPSULE_PREVIEW_FPS=2
 CAPSULE_PREVIEW_JPEG_QUALITY=84
@@ -316,4 +347,4 @@ CAPSULE_SOLENOID_COOLDOWN_SECONDS=120
 
 Keep `CAPSULE_SOLENOID_ENABLED=false` until `CAPSULE_SOLENOID_ACTIVE_HIGH` is known. Choosing the wrong polarity can energize a valve while the application considers it off.
 
-The default trained OBB model is expected at `models/trained/capsule_yolo11n_obb_best.pt`. Model binaries are deliberately absent from a fresh checkout: train with the LFS-backed labeled data, retrieve a checkpoint from your artifact storage, or set `CAPSULE_MODEL` to a model path mounted inside the container.
+The default trained OBB model is expected at `models/trained/capsule_yolo11s_obb_best.pt`. Model binaries are deliberately absent from a fresh checkout: train with the LFS-backed labeled data, retrieve a checkpoint from your artifact storage, or set `CAPSULE_MODEL` to a model path mounted inside the container.

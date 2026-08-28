@@ -1,4 +1,4 @@
-path: /home/tuna/capsule-jetson/data/prepared
+path: C:/Users/Alex/Desktop/capsule-jetson/data/prepared
 train: images/train
 val: images/val
 test: images/test

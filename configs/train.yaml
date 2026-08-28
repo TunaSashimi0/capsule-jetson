@@ -1,9 +1,10 @@
 model: yolo11n-obb.pt
 data: configs/data/capsule.yaml
-imgsz: 640
+imgsz: 1280
 epochs: 100
 batch: 4
 workers: 0
 project: runs/train
 name: capsule_yolo11n_obb
 seed: 42
+amp: true
