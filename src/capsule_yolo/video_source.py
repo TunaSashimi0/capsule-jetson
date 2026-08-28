@@ -12,6 +12,7 @@ class VideoSourceSpec:
     backend: int | None = None
     label: str = ""
     requires_gstreamer: bool = False
+    sensor_id: int | None = None
 
 
 def cv2_has_gstreamer() -> bool:
@@ -39,7 +40,13 @@ def jetson_csi_pipeline(
     )
 
 
-def parse_video_source(source: str) -> VideoSourceSpec:
+def parse_video_source(
+    source: str,
+    *,
+    width: int = 1280,
+    height: int = 720,
+    framerate: int = 30,
+) -> VideoSourceSpec:
     value = source.strip()
     lowered = value.lower()
 
@@ -47,12 +54,12 @@ def parse_video_source(source: str) -> VideoSourceSpec:
         return VideoSourceSpec(raw=value, capture_source=int(value), label=f"v4l2:{value}")
 
     if lowered in {"cam0", "csi0", "argus0"}:
-        return _csi_source(value, 0)
+        return _csi_source(value, 0, width=width, height=height, framerate=framerate)
 
     for prefix in ("cam:", "csi:", "argus:"):
         if lowered.startswith(prefix):
             sensor_id = int(lowered.removeprefix(prefix) or "0")
-            return _csi_source(value, sensor_id)
+            return _csi_source(value, sensor_id, width=width, height=height, framerate=framerate)
 
     if lowered.startswith("gst:"):
         pipeline = value[4:].strip()
@@ -67,8 +74,14 @@ def parse_video_source(source: str) -> VideoSourceSpec:
     return VideoSourceSpec(raw=value, capture_source=value, label=value)
 
 
-def open_video_capture(source: str) -> tuple[cv2.VideoCapture, VideoSourceSpec]:
-    spec = parse_video_source(source)
+def open_video_capture(
+    source: str,
+    *,
+    width: int = 1280,
+    height: int = 720,
+    framerate: int = 30,
+) -> tuple[cv2.VideoCapture, VideoSourceSpec]:
+    spec = parse_video_source(source, width=width, height=height, framerate=framerate)
     if spec.requires_gstreamer and not cv2_has_gstreamer():
         raise RuntimeError(
             "OpenCV was built without GStreamer support. CSI sources like "
@@ -83,11 +96,17 @@ def open_video_capture(source: str) -> tuple[cv2.VideoCapture, VideoSourceSpec]:
     return capture, spec
 
 
-def _csi_source(raw: str, sensor_id: int) -> VideoSourceSpec:
+def _csi_source(raw: str, sensor_id: int, *, width: int, height: int, framerate: int) -> VideoSourceSpec:
     return VideoSourceSpec(
         raw=raw,
-        capture_source=jetson_csi_pipeline(sensor_id=sensor_id),
+        capture_source=jetson_csi_pipeline(
+            sensor_id=sensor_id,
+            width=width,
+            height=height,
+            framerate=framerate,
+        ),
         backend=cv2.CAP_GSTREAMER,
         label=f"csi:{sensor_id}",
         requires_gstreamer=True,
+        sensor_id=sensor_id,
     )

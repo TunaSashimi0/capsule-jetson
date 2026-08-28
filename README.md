@@ -189,7 +189,7 @@ cp .env.jetson.example .env.jetson
 cat /etc/nv_tegra_release
 ```
 
-Then edit `.env.jetson` and set `JETSON_BASE_IMAGE` to the matching image tag from NVIDIA NGC. This device was observed as `R39 REVISION 2.0`, so use an R39.2-compatible `l4t-pytorch` image when available.
+Then edit `.env.jetson` and set `JETSON_BASE_IMAGE` to the matching image tag from NVIDIA NGC. This device currently runs JetPack 6.2.2 / Jetson Linux 36.5 (`R36 REVISION 5.0`) with kernel `5.15.185-tegra`, so use an R36.5-compatible image.
 
 Build and run the container with plain Docker:
 
@@ -215,20 +215,29 @@ Useful `.env.jetson` settings:
 ```text
 CAPSULE_MODEL=/app/models/trained/capsule_yolo11n_obb_best.pt
 CAPSULE_SOURCE=csi:0
-CAPSULE_CAMERA_DEVICE=/dev/video0
+CAPSULE_SECONDARY_SOURCE=csi:1
 CAPSULE_DEVICE=0
+CAPSULE_IMGSZ=1280
+CAPSULE_CAPTURE_WIDTH=3280
+CAPSULE_CAPTURE_HEIGHT=2464
+CAPSULE_CAPTURE_FPS=21
+CAPSULE_PREVIEW_WIDTH=1280
+CAPSULE_PREVIEW_FPS=2
+CAPSULE_PREVIEW_JPEG_QUALITY=84
+CAPSULE_AUTOFOCUS=true
 ```
 
 Camera source values:
 
 ```text
 CAPSULE_SOURCE=csi:0   # Jetson CSI / Argus cam0
+CAPSULE_SECONDARY_SOURCE=csi:1  # Jetson CSI / Argus cam1
 CAPSULE_SOURCE=cam0    # Alias for csi:0
 CAPSULE_SOURCE=0       # USB/V4L2 camera at /dev/video0
 CAPSULE_SOURCE=gst:<pipeline>  # Custom GStreamer pipeline
 ```
 
-CSI sources require an OpenCV build with GStreamer enabled. On Jetson, prefer the system `python3-opencv` package or the provided Jetson container path; generic `opencv-python` wheels often do not include GStreamer support. If the camera has an IR mode or IR sensor, it is only useful to this model if it produces a normal image stream and the model has been trained or validated on similar IR imagery.
+CSI sources require an OpenCV build with GStreamer enabled. On Jetson, prefer the system `python3-opencv` package or the provided Jetson container path; generic `opencv-python` wheels often do not include GStreamer support. The dual web worker captures each IMX219 independently at 3280×2464, feeds each native frame to the 1280-pixel YOLO model, and scales only the annotated browser preview. It does not stitch the cameras into a lower-resolution inference image. Preview rendering is demand-driven and runs in a separate bounded worker: with no browser connected it does no drawing or JPEG encoding, and when viewed it drops stale frames instead of delaying inference.
 
 ### Configure Jetson CSI Camera Hardware
 
@@ -253,6 +262,58 @@ gst-launch-1.0 nvarguscamerasrc sensor-id=0 num-buffers=1 ! fakesink
 
 If that probe reports `No cameras available`, power down and check the ribbon orientation, connector seating, and whether the camera sensor matches the selected overlay.
 
-Pi Camera Module 3 / IMX708 note: Raspberry Pi Camera Module 3 uses a Sony IMX708 sensor. This Jetson R39.2 image does not include an `nv_imx708` kernel module or an IMX708 Jetson-IO overlay, so it cannot be configured as a working Argus camera without installing a vendor/kernel driver and matching device-tree overlay. Raspberry Pi's upstream IMX708 overlay uses I2C address `0x1a`; the stock Jetson IMX219 overlays probe address `0x10`, so IMX219 failure logs are not proof that an IMX708 module is bad.
+### Dual Arducam IMX219-AF cameras
+
+This Jetson uses two B0181-style IMX219-AF modules: Argus sensor 0 / CAM A has its focus actuator on I2C bus 10, and sensor 1 / CAM C uses bus 9. Configure the validated dual overlay with:
+
+```bash
+scripts/configure_imx219_dual.sh check
+sudo scripts/configure_imx219_dual.sh install
+sudo reboot
+```
+
+After reboot, the web app opens both native 3280×2464 modes and autofocuses each live stream before starting inference. Docker receives `/dev/i2c-9` and `/dev/i2c-10` so the app can send the Arducam 10-bit focus commands while the camera rails are powered. Autofocus status, final position, and the measured sharpness range appear below each view.
+
+To validate both cameras and focus motors independently of the web app:
+
+```bash
+sudo scripts/test_imx219_autofocus.py
+```
+
+The default `CAPSULE_IMGSZ=1280` matches the trained TensorRT engine. Native capture resolution remains 3280×2464 until YOLO preprocessing. `CAPSULE_PREVIEW_WIDTH`, `CAPSULE_PREVIEW_FPS`, and `CAPSULE_PREVIEW_JPEG_QUALITY` affect only the browser preview. A larger inference size requires a model or TensorRT engine exported for that size.
+
+### MCP23017/MCP23008 solenoid cycle
+
+The web process can control an MCP23017 or MCP23008 through the
+[Adafruit MCP230xx CircuitPython library](https://docs.circuitpython.org/projects/mcp230xx/en/latest/).
+The controller waits until every configured camera is actively producing inference results, then runs this repeating sequence:
+
+```text
+t=0s     channel 0 on; begin the inference inspection window
+t=2s     channel 0 off; inference continues
+t=30s    channel 1 on, only if every camera inferred during the window
+t=33s    channel 1 off; all configured outputs reset inactive
+t=153s   120-second cooldown ends and the next cycle may begin
+```
+
+If inference stops, a camera stalls, the app stops, or the I2C worker raises an error, both configured channels are forced inactive. Solenoid phase, remaining time, cycle number, and inspection inference count are available in `/stats` and shown in the web header.
+
+The expander detected on this Jetson is an MCP23017-compatible device on `/dev/i2c-7` at address `0x20`. Set the driver board's verified electrical polarity before enabling it:
+
+```text
+CAPSULE_SOLENOID_ENABLED=false
+CAPSULE_SOLENOID_CHIP=mcp23017
+CAPSULE_SOLENOID_I2C_BUS=7
+CAPSULE_SOLENOID_I2C_ADDRESS=0x20
+CAPSULE_SOLENOID_ACTIVE_HIGH=true
+CAPSULE_SOLENOID_INTAKE_CHANNEL=0
+CAPSULE_SOLENOID_DISCHARGE_CHANNEL=1
+CAPSULE_SOLENOID_INTAKE_SECONDS=2
+CAPSULE_SOLENOID_INSPECTION_SECONDS=30
+CAPSULE_SOLENOID_DISCHARGE_SECONDS=3
+CAPSULE_SOLENOID_COOLDOWN_SECONDS=120
+```
+
+Keep `CAPSULE_SOLENOID_ENABLED=false` until `CAPSULE_SOLENOID_ACTIVE_HIGH` is known. Choosing the wrong polarity can energize a valve while the application considers it off.
 
 The default trained OBB model is expected at `models/trained/capsule_yolo11n_obb_best.pt`. Model binaries are deliberately absent from a fresh checkout: train with the LFS-backed labeled data, retrieve a checkpoint from your artifact storage, or set `CAPSULE_MODEL` to a model path mounted inside the container.

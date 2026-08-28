@@ -3,198 +3,258 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>YOLO Capsule Counter</title>
-    <link rel="stylesheet" href="{{ url_for('static', path='/styles.css') }}">
+    <title>Capsule Inspector</title>
+    <link rel="stylesheet" href="{{ url_for('static', path='/styles.css') }}?v={{ asset_version }}">
   </head>
   <body>
-    <main class="shell">
-      <section class="video-area">
-        <img id="video-feed" src="/video_feed" alt="Annotated capsule counter video stream">
+    <header class="topbar">
+      <div class="brand">
+        <strong>Capsule Inspector</strong>
+        <span id="status">Starting…</span>
+      </div>
+      <div class="totals" aria-label="Detection summary">
+        <span>Total <strong id="capsule-count">0</strong></span>
+        <span class="good">Good <strong id="good-count">0</strong></span>
+        <span class="defect">Defects <strong id="defect-count">0</strong></span>
+        <span>Inference <strong id="fps">0.0</strong> FPS</span>
+      </div>
+      <div class="top-actions">
+        <span id="solenoid-state">Solenoid disabled</span>
+        <span id="preview-state">Review stream ready</span>
+        <button id="preview-toggle" type="button">Pause preview</button>
+        <button id="stop-button" type="button" class="danger-button">Stop</button>
+      </div>
+    </header>
+
+    <main>
+      <section class="camera-grid" aria-label="Dual camera review">
+        <article class="camera-view">
+          <header>
+            <strong>Camera A</strong>
+            <span id="camera-0-source">csi:0</span>
+            <span id="camera-0-resolution">3280 × 2464 internal</span>
+          </header>
+          <img id="video-feed-0" data-feed="/video_feed/0" src="/video_feed/0" decoding="async" alt="Camera A annotated review stream" title="Double-click for fullscreen">
+          <footer>
+            <span>Good <strong id="camera-0-good">0</strong></span>
+            <span>Defects <strong class="defect" id="camera-0-defects">0</strong></span>
+            <span><strong id="camera-0-fps">0.0</strong> FPS</span>
+            <span id="camera-0-focus">Autofocus pending</span>
+          </footer>
+        </article>
+
+        <article class="camera-view">
+          <header>
+            <strong>Camera C</strong>
+            <span id="camera-1-source">csi:1</span>
+            <span id="camera-1-resolution">3280 × 2464 internal</span>
+          </header>
+          <img id="video-feed-1" data-feed="/video_feed/1" src="/video_feed/1" decoding="async" alt="Camera C annotated review stream" title="Double-click for fullscreen">
+          <footer>
+            <span>Good <strong id="camera-1-good">0</strong></span>
+            <span>Defects <strong class="defect" id="camera-1-defects">0</strong></span>
+            <span><strong id="camera-1-fps">0.0</strong> FPS</span>
+            <span id="camera-1-focus">Autofocus pending</span>
+          </footer>
+        </article>
       </section>
 
-      <aside class="panel">
-        <div class="metric primary">
-          <span class="label">Total Capsules</span>
-          <strong id="capsule-count">0</strong>
-        </div>
-
-        <div class="metric-row">
-          <div class="metric good-metric">
-            <span class="label">Good</span>
-            <strong id="good-count">0</strong>
-          </div>
-          <div class="metric defect-metric">
-            <span class="label">Defects</span>
-            <strong id="defect-count">0</strong>
-          </div>
-        </div>
-
-        <div class="metric-row">
-          <div class="metric">
-            <span class="label">FPS</span>
-            <strong id="fps">0.0</strong>
-          </div>
-          <div class="metric">
-            <span class="label">Model</span>
-            <strong id="model-state">{{ "Ready" if model_exists else "Missing" }}</strong>
-          </div>
-        </div>
-
-        <div class="metric-row">
-          <div class="metric">
-            <span class="label">Avg Width</span>
-            <strong><span id="avg-width">0.0</span><small> px</small></strong>
-          </div>
-          <div class="metric">
-            <span class="label">Avg Height</span>
-            <strong><span id="avg-height">0.0</span><small> px</small></strong>
-          </div>
-        </div>
-
-        <div class="metric">
-          <span class="label">Avg Rotation</span>
-          <strong><span id="avg-angle">0.0</span><small> deg</small></strong>
-        </div>
-
-        <section class="measurements">
-          <span class="label">Capsule Measurements</span>
+      <section class="utility-row">
+        <details>
+          <summary>Latest measurements</summary>
           <div class="table-wrap">
             <table>
               <thead>
-                <tr>
-                  <th>ID</th>
-                  <th>Class</th>
-                  <th>Conf</th>
-                  <th>W</th>
-                  <th>H</th>
-                  <th>Angle</th>
-                </tr>
+                <tr><th>Cam</th><th>ID</th><th>Class</th><th>Confidence</th><th>Width</th><th>Height</th><th>Angle</th></tr>
               </thead>
-              <tbody id="measurement-rows">
-                <tr>
-                  <td colspan="6">No detections</td>
-                </tr>
-              </tbody>
+              <tbody id="measurement-rows"><tr><td colspan="7">No detections</td></tr></tbody>
             </table>
           </div>
-        </section>
+        </details>
 
-        <form id="settings-form" class="controls">
-          <label>
-            <span>Model path</span>
-            <input name="model" value="{{ settings.model }}">
-          </label>
+        <details>
+          <summary>Settings</summary>
+          <form id="settings-form">
+            <label class="wide">Model <input name="model" value="{{ settings.model }}"></label>
+            <label>Camera A <input name="source" value="{{ settings.source }}"></label>
+            <label>Camera C <input name="secondary_source" value="{{ settings.secondary_source or '' }}"></label>
+            <label>Capture width <input name="capture_width" type="number" min="640" value="{{ settings.capture_width }}"></label>
+            <label>Capture height <input name="capture_height" type="number" min="480" value="{{ settings.capture_height }}"></label>
+            <label>Capture FPS <input name="capture_fps" type="number" min="1" max="60" value="{{ settings.capture_fps }}"></label>
+            <label>YOLO size <input name="imgsz" type="number" min="320" step="32" value="{{ settings.imgsz }}"></label>
+            <label>Review width <input name="preview_width" type="number" min="640" value="{{ settings.preview_width }}"></label>
+            <label>Review FPS <input name="preview_fps" type="number" min="0.5" max="10" step="0.5" value="{{ settings.preview_fps }}"></label>
+            <label>JPEG quality <input name="preview_jpeg_quality" type="number" min="30" max="95" value="{{ settings.preview_jpeg_quality }}"></label>
+            <label>Confidence <input name="conf" type="number" min="0.01" max="1" step="0.01" value="{{ settings.conf }}"></label>
+            <label>IoU <input name="iou" type="number" min="0.01" max="1" step="0.01" value="{{ settings.iou }}"></label>
+            <label>Device <input name="device" value="{{ settings.device or '' }}"></label>
+            <label class="check"><input id="autofocus" name="autofocus" type="checkbox" {% if settings.autofocus %}checked{% endif %}> Autofocus on start</label>
+            <button type="submit">Apply and refocus</button>
+          </form>
+        </details>
+      </section>
 
-          <label>
-            <span>Source</span>
-            <input name="source" value="{{ settings.source }}">
-          </label>
-
-          <div class="control-grid">
-            <label>
-              <span>Image size</span>
-              <input name="imgsz" type="number" min="320" step="32" value="{{ settings.imgsz }}">
-            </label>
-
-            <label>
-              <span>Confidence</span>
-              <input name="conf" type="number" min="0.01" max="1" step="0.01" value="{{ settings.conf }}">
-            </label>
-
-            <label>
-              <span>IoU</span>
-              <input name="iou" type="number" min="0.01" max="1" step="0.01" value="{{ settings.iou }}">
-            </label>
-
-            <label>
-              <span>Device</span>
-              <input name="device" placeholder="cpu, 0, cuda:0">
-            </label>
-          </div>
-
-          <div class="actions">
-            <button type="submit">Apply</button>
-            <button id="stop-button" type="button" class="secondary">Stop</button>
-          </div>
-        </form>
-
-        <div class="status">
-          <span class="label">Status</span>
-          <p id="status">Starting stream...</p>
-        </div>
-      </aside>
+      <footer class="system-note">
+        Native <span id="capture-resolution">{{ settings.capture_width }} × {{ settings.capture_height }}</span>
+        · YOLO <span id="inference-width">{{ settings.imgsz }}</span>
+        · Model <span id="model-state">{{ "ready" if model_exists else "missing" }}</span>
+      </footer>
     </main>
 
     <script>
-      const countEl = document.querySelector("#capsule-count");
-      const goodCountEl = document.querySelector("#good-count");
-      const defectCountEl = document.querySelector("#defect-count");
-      const fpsEl = document.querySelector("#fps");
-      const modelEl = document.querySelector("#model-state");
-      const avgWidthEl = document.querySelector("#avg-width");
-      const avgHeightEl = document.querySelector("#avg-height");
-      const avgAngleEl = document.querySelector("#avg-angle");
-      const measurementRowsEl = document.querySelector("#measurement-rows");
-      const statusEl = document.querySelector("#status");
-      const form = document.querySelector("#settings-form");
-      const stopButton = document.querySelector("#stop-button");
-
-      async function refreshStats() {
-        const response = await fetch("/stats");
-        const data = await response.json();
-        countEl.textContent = data.capsule_count ?? 0;
-        goodCountEl.textContent = data.good_count ?? 0;
-        defectCountEl.textContent = data.defect_count ?? 0;
-        fpsEl.textContent = Number(data.fps ?? 0).toFixed(1);
-        avgWidthEl.textContent = Number(data.avg_width_px ?? 0).toFixed(1);
-        avgHeightEl.textContent = Number(data.avg_height_px ?? 0).toFixed(1);
-        avgAngleEl.textContent = Number(data.avg_angle_deg ?? 0).toFixed(1);
-        modelEl.textContent = data.model_exists ? "Ready" : "Missing";
-        statusEl.textContent = data.status ?? "idle";
-
-        const measurements = data.measurements ?? [];
-        if (!measurements.length) {
-          measurementRowsEl.innerHTML = `<tr><td colspan="6">No detections</td></tr>`;
-          return;
-        }
-
-        measurementRowsEl.innerHTML = measurements.map((item) => `
-          <tr class="${item.class_name === "capsule_defect" ? "defect-row" : ""}">
-            <td>${item.index}</td>
-            <td class="class-name">${escapeHtml(item.class_name ?? "unknown")}</td>
-            <td>${Number(item.confidence ?? 0).toFixed(2)}</td>
-            <td>${Number(item.width_px ?? 0).toFixed(1)}</td>
-            <td>${Number(item.height_px ?? 0).toFixed(1)}</td>
-            <td>${Number(item.angle_deg ?? 0).toFixed(1)}</td>
-          </tr>
-        `).join("");
-      }
+      const byId = (id) => document.getElementById(id);
+      const feeds = [0, 1].map((index) => byId(`video-feed-${index}`));
+      const cameras = [0, 1].map((index) => ({
+        source: byId(`camera-${index}-source`), resolution: byId(`camera-${index}-resolution`),
+        good: byId(`camera-${index}-good`), defects: byId(`camera-${index}-defects`),
+        fps: byId(`camera-${index}-fps`), focus: byId(`camera-${index}-focus`)
+      }));
+      const form = byId("settings-form");
+      let previewWanted = true;
+      let statsTimer;
+      const previewSequence = [null, null];
+      const previewChangedAt = [Date.now(), Date.now()];
 
       function escapeHtml(value) {
-        const element = document.createElement("div");
-        element.textContent = String(value);
-        return element.innerHTML;
+        const node = document.createElement("div");
+        node.textContent = String(value);
+        return node.innerHTML;
       }
 
+      function focusText(camera) {
+        if (camera.focus_status === "focused") return `Focused · position ${camera.focus_position}`;
+        return camera.focus_status || "Autofocus pending";
+      }
+
+      async function refreshStats() {
+        try {
+          const response = await fetch("/stats", { cache: "no-store" });
+          const data = await response.json();
+          byId("capsule-count").textContent = data.capsule_count ?? 0;
+          byId("good-count").textContent = data.good_count ?? 0;
+          byId("defect-count").textContent = data.defect_count ?? 0;
+          byId("fps").textContent = Number(data.fps ?? 0).toFixed(1);
+          byId("status").textContent = data.status ?? "idle";
+          byId("model-state").textContent = data.model_exists ? "ready" : "missing";
+          byId("capture-resolution").textContent = `${data.capture_width ?? 0} × ${data.capture_height ?? 0}`;
+          byId("inference-width").textContent = data.inference_width ?? 0;
+          byId("preview-state").textContent = previewWanted
+            ? `${data.preview_width ?? 1280}px review · ${data.preview_fps ?? 2} FPS`
+            : "Preview paused · detection active";
+          const solenoid = data.solenoid ?? {};
+          const phaseNames = {
+            intake_open: "Channel 0 open",
+            inspecting: "Inspecting",
+            discharge_open: "Channel 1 open",
+            cooldown: "Cooldown",
+            waiting_for_inference: "Waiting for inference",
+            disabled: "Solenoid disabled",
+            stopped: "Solenoid stopped",
+            error: "Solenoid error"
+          };
+          const remaining = Number(solenoid.seconds_remaining ?? 0);
+          byId("solenoid-state").textContent = solenoid.error
+            ? `Solenoid error: ${solenoid.error}`
+            : `${phaseNames[solenoid.status] ?? solenoid.status ?? "Solenoid unavailable"}${remaining > 0 ? ` · ${remaining.toFixed(0)}s` : ""}`;
+
+          const now = Date.now();
+          (data.preview_sequences ?? []).forEach((sequence, index) => {
+            if (sequence !== previewSequence[index]) {
+              previewSequence[index] = sequence;
+              previewChangedAt[index] = now;
+            } else if (
+              previewWanted && !document.hidden && data.status === "running" &&
+              now - previewChangedAt[index] > 7000
+            ) {
+              connectFeed(index);
+              previewChangedAt[index] = now;
+            }
+          });
+
+          cameras.forEach((elements, index) => {
+            const camera = (data.cameras ?? [])[index];
+            if (!camera) return;
+            elements.source.textContent = camera.source;
+            elements.resolution.textContent = camera.frame_width
+              ? `${camera.frame_width} × ${camera.frame_height} internal`
+              : `${data.capture_width} × ${data.capture_height} requested`;
+            elements.good.textContent = camera.good_count ?? 0;
+            elements.defects.textContent = camera.defect_count ?? 0;
+            elements.fps.textContent = Number(camera.fps ?? 0).toFixed(1);
+            elements.focus.textContent = focusText(camera);
+          });
+
+          const measurements = data.measurements ?? [];
+          byId("measurement-rows").innerHTML = measurements.length ? measurements.map((item) => `
+            <tr class="${item.class_name === "capsule_defect" ? "defect-row" : ""}">
+              <td>${escapeHtml(item.camera_label ?? item.camera_index)}</td>
+              <td>${item.index}</td><td>${escapeHtml(item.class_name ?? "unknown")}</td>
+              <td>${Number(item.confidence ?? 0).toFixed(2)}</td>
+              <td>${Number(item.width_px ?? 0).toFixed(1)}</td>
+              <td>${Number(item.height_px ?? 0).toFixed(1)}</td>
+              <td>${Number(item.angle_deg ?? 0).toFixed(1)}</td>
+            </tr>`).join("") : `<tr><td colspan="7">No detections</td></tr>`;
+        } catch (error) {
+          byId("status").textContent = `Unavailable: ${error}`;
+        }
+      }
+
+      function connectFeed(index) {
+        const image = feeds[index];
+        image.src = `${image.dataset.feed}?ts=${Date.now()}`;
+        image.closest(".camera-view").classList.remove("paused");
+      }
+
+      function connectPreview(connected) {
+        feeds.forEach((image, index) => {
+          if (connected) {
+            connectFeed(index);
+            previewChangedAt[index] = Date.now();
+          } else {
+            image.removeAttribute("src");
+            image.closest(".camera-view").classList.add("paused");
+          }
+        });
+        byId("preview-toggle").textContent = previewWanted ? "Pause preview" : "Resume preview";
+      }
+
+      function scheduleStats() {
+        clearTimeout(statsTimer);
+        if (document.hidden) return;
+        statsTimer = setTimeout(async () => { await refreshStats(); scheduleStats(); }, 2000);
+      }
+
+      byId("preview-toggle").addEventListener("click", () => {
+        previewWanted = !previewWanted;
+        connectPreview(previewWanted && !document.hidden);
+        refreshStats();
+      });
+      byId("stop-button").addEventListener("click", async () => {
+        await fetch("/stop", { method: "POST" });
+        previewWanted = false;
+        connectPreview(false);
+        refreshStats();
+      });
       form.addEventListener("submit", async (event) => {
         event.preventDefault();
         const payload = Object.fromEntries(new FormData(form).entries());
+        payload.autofocus = byId("autofocus").checked;
         await fetch("/settings", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload)
+          method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload)
         });
-        document.querySelector("#video-feed").src = `/video_feed?ts=${Date.now()}`;
-        await refreshStats();
+        if (previewWanted && !document.hidden) connectPreview(true);
+        refreshStats();
       });
-
-      stopButton.addEventListener("click", async () => {
-        await fetch("/stop", { method: "POST" });
-        await refreshStats();
+      feeds.forEach((image) => image.addEventListener("dblclick", () => {
+        image.closest(".camera-view").requestFullscreen?.();
+      }));
+      document.addEventListener("visibilitychange", () => {
+        connectPreview(previewWanted && !document.hidden);
+        if (!document.hidden) { refreshStats(); scheduleStats(); }
       });
 
       refreshStats();
-      setInterval(refreshStats, 1000);
+      scheduleStats();
     </script>
   </body>
 </html>

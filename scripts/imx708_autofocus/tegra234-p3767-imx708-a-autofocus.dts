@@ -1,0 +1,96 @@
+/dts-v1/;
+/plugin/;
+
+/ {
+	overlay-name = "Raspberry Pi Camera Module 3 autofocus (single CAM A)";
+	jetson-header-name = "Jetson 24pin CSI Connector";
+	compatible = "nvidia,p3768-0000+p3767-0000",
+		     "nvidia,p3768-0000+p3767-0001",
+		     "nvidia,p3768-0000+p3767-0003",
+		     "nvidia,p3768-0000+p3767-0004",
+		     "nvidia,p3768-0000+p3767-0005",
+		     "nvidia,p3768-0000+p3767-0000-super",
+		     "nvidia,p3768-0000+p3767-0001-super",
+		     "nvidia,p3768-0000+p3767-0003-super",
+		     "nvidia,p3768-0000+p3767-0004-super",
+		     "nvidia,p3768-0000+p3767-0005-super";
+
+	/* The Camera Module 3 DW9817 VCM is register-compatible with DW9807. */
+	fragment@0 {
+		target-path = "/bus@0/cam_i2cmux/i2c@0";
+		__overlay__ {
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			imx708_vcm_a: dw9817@c {
+				compatible = "dongwoon,dw9817-vcm";
+				reg = <0x0c>;
+				status = "okay";
+			};
+		};
+	};
+
+	fragment@1 {
+		target-path = "/bus@0/cam_i2cmux/i2c@0/rpicam3_imx708_a@1a";
+		__overlay__ {
+			lens-focus = <&imx708_vcm_a>;
+		};
+	};
+
+	/* Jetson Linux 36.5/Argus lens registration for camera module0. */
+	fragment@2 {
+		target-path = "/tegra-camera-platform/modules/module0";
+		__overlay__ {
+			drivernode1 {
+				status = "okay";
+				pcl_id = "v4l2_lens";
+				sysfs-device-tree = "/sys/firmware/devicetree/base/bus@0/cam_i2cmux/i2c@0/dw9817@c";
+			};
+		};
+	};
+
+	/* The vendor base overlay is dual-camera only. Disable its empty CAM C
+	 * graph so Tegra VI does not wait forever for a second IMX708.
+	 */
+	fragment@3 {
+		target-path = "/tegra-capture-vi";
+		__overlay__ {
+			num-channels = <1>;
+		};
+	};
+
+	fragment@4 {
+		target-path = "/tegra-capture-vi/ports/port@1";
+		__overlay__ {
+			status = "disabled";
+		};
+	};
+
+	fragment@5 {
+		target-path = "/bus@0/host1x@13e00000/nvcsi@15a00000";
+		__overlay__ {
+			num-channels = <1>;
+		};
+	};
+
+	fragment@6 {
+		target-path = "/bus@0/host1x@13e00000/nvcsi@15a00000/channel@1";
+		__overlay__ {
+			status = "disabled";
+		};
+	};
+
+	fragment@7 {
+		target-path = "/bus@0/cam_i2cmux/i2c@1/rpicam3_imx708_c@1a";
+		__overlay__ {
+			status = "disabled";
+		};
+	};
+
+	fragment@8 {
+		target-path = "/tegra-camera-platform/modules/module1";
+		__overlay__ {
+			status = "disabled";
+		};
+	};
+};

@@ -77,6 +77,59 @@ def annotated_frame(result: Any, summary: CountSummary, fps: float, conf: float,
     return draw_status_panel(frame, summary, fps=fps, conf=conf, source_label=source_label)
 
 
+def lightweight_preview(
+    frame: np.ndarray,
+    summary: CountSummary,
+    *,
+    max_width: int,
+    fps: float,
+    source_label: str,
+) -> np.ndarray:
+    """Render a small annotated preview without copying/drawing the native frame."""
+    scale = 1.0
+    if max_width > 0 and frame.shape[1] > max_width:
+        scale = max_width / frame.shape[1]
+        output = cv2.resize(
+            frame,
+            (max_width, max(1, round(frame.shape[0] * scale))),
+            interpolation=cv2.INTER_AREA,
+        )
+    else:
+        output = frame.copy()
+
+    line_width = max(1, round(min(output.shape[:2]) / 400))
+    for item in summary.measurements:
+        color = _class_color(item.class_name)
+        rectangle = (
+            (item.center_x_px * scale, item.center_y_px * scale),
+            (item.width_px * scale, item.height_px * scale),
+            item.angle_deg,
+        )
+        points = np.rint(cv2.boxPoints(rectangle)).astype(np.int32)
+        cv2.polylines(output, [points], True, color, line_width, cv2.LINE_AA)
+        _draw_label(
+            output,
+            points,
+            f"{item.class_name} {item.confidence:.2f}",
+            color,
+            line_width,
+        )
+
+    banner = f"{source_label}  |  {summary.capsule_count} detected  |  {fps:.1f} inference FPS"
+    cv2.rectangle(output, (0, 0), (output.shape[1], 30), (20, 24, 31), -1)
+    cv2.putText(
+        output,
+        banner,
+        (9, 21),
+        cv2.FONT_HERSHEY_SIMPLEX,
+        0.48,
+        (235, 240, 245),
+        1,
+        cv2.LINE_AA,
+    )
+    return output
+
+
 def _to_numpy(value: Any) -> np.ndarray:
     if hasattr(value, "detach"):
         value = value.detach()
