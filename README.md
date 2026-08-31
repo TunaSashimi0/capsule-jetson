@@ -14,7 +14,7 @@ labeled_data/
   notes.json
 ```
 
-The current OBB data audit found 157 images, 157 matching label files, and 288 labeled capsule boxes (99 defect and 189 good).
+The current OBB data audit found 325 images, 325 matching label files, and 460 labeled capsule boxes (235 defect and 225 good).
 
 ## Environment
 
@@ -123,8 +123,8 @@ The YOLO run artifacts will be written under:
 runs/train/capsule_yolo11s_obb/weights/
 ```
 
-After training, `best.pt` is copied to the local deployable path (ignored by
-Git):
+After training, `best.pt` is copied to the deployable path tracked through Git
+LFS:
 
 ```text
 models/trained/capsule_yolo11s_obb_best.pt
@@ -347,4 +347,4 @@ CAPSULE_SOLENOID_COOLDOWN_SECONDS=120
 
 Keep `CAPSULE_SOLENOID_ENABLED=false` until `CAPSULE_SOLENOID_ACTIVE_HIGH` is known. Choosing the wrong polarity can energize a valve while the application considers it off.
 
-The default trained OBB model is expected at `models/trained/capsule_yolo11s_obb_best.pt`. Model binaries are deliberately absent from a fresh checkout: train with the LFS-backed labeled data, retrieve a checkpoint from your artifact storage, or set `CAPSULE_MODEL` to a model path mounted inside the container.
+The default trained OBB model is tracked through Git LFS at `models/trained/capsule_yolo11s_obb_best.pt`. Run `git lfs pull` after cloning to retrieve the model and labeled images, or set `CAPSULE_MODEL` to another model path mounted inside the container.

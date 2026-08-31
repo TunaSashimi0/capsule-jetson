@@ -55,6 +55,7 @@ Thumbs.db
 !/models/base/.gitkeep
 /models/trained/*
 !/models/trained/.gitkeep
+!/models/trained/capsule_yolo11s_obb_best.pt
 /models/exported/
 *.pb
 *_saved_model/
