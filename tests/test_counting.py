@@ -19,6 +19,27 @@ def make_result(rows: list[list[float]], classes: list[int], confidences: list[f
 
 
 class SummarizeResultTests(unittest.TestCase):
+    def test_missing_detections_returns_empty_summary(self) -> None:
+        summary = summarize_result(SimpleNamespace(names={}, obb=None, boxes=None))
+
+        self.assertEqual(summary.total, 0)
+        self.assertEqual(summary.measurements, [])
+        self.assertEqual(summary.by_class, {"capsule": 0})
+
+    def test_axis_aligned_boxes_are_measured_with_zero_angle(self) -> None:
+        detections = SimpleNamespace(
+            cls=np.asarray([1], dtype=np.float32),
+            conf=np.asarray([0.75], dtype=np.float32),
+            xywhr=None,
+            xywh=np.asarray([[100, 80, 40, 20]], dtype=np.float32),
+        )
+        result = SimpleNamespace(names={1: "capsule_good"}, obb=None, boxes=detections)
+
+        summary = summarize_result(result)
+
+        self.assertEqual(summary.total, 1)
+        self.assertAlmostEqual(summary.measurements[0].angle_deg, 0.0)
+
     def test_defect_wins_over_higher_confidence_good_detection(self) -> None:
         result = make_result(
             rows=[[100, 100, 40, 20, 0], [101, 100, 42, 20, 0]],

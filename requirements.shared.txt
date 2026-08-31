@@ -1,0 +1,13 @@
+# Exact application dependency versions shared by desktop/local Python and the
+# Jetson container. Update these deliberately and verify both environments.
+ultralytics==8.4.78
+fastapi==0.138.1
+uvicorn[standard]==0.49.0
+jinja2==3.1.6
+numpy==1.26.4
+pyyaml==6.0.3
+pydantic==2.13.4
+packaging==26.2
+Adafruit-Blinka==8.70.0
+adafruit-extended-bus==1.0.2
+adafruit-circuitpython-mcp230xx==2.6.2

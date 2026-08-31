@@ -96,7 +96,7 @@ def main() -> None:
                 conf=args.conf,
                 iou=args.iou,
                 device=args.device,
-                quantize=16 if args.half else 32,
+                half=args.half,
                 verbose=False,
             )[0]
             summary = summarize_result(result)

@@ -48,6 +48,7 @@ class IncrementingInference:
                     "camera_index": index,
                     "status": "running",
                     "inference_count": count,
+                    "frame_time": time.monotonic(),
                 }
                 for index, count in enumerate(self.counts)
             ]
@@ -147,6 +148,47 @@ class SolenoidCycleControllerTests(unittest.TestCase):
         controller.stop()
         self.assertFalse(opened)
         self.assertEqual(controller.stats()["status"], "disabled")
+
+    def test_stale_camera_frame_is_not_inference_ready(self) -> None:
+        stale_snapshot = {
+            "status": "running",
+            "cameras": [
+                {
+                    "camera_index": 0,
+                    "status": "running",
+                    "inference_count": 1,
+                    "frame_time": time.monotonic() - 1.0,
+                }
+            ],
+        }
+        controller = SolenoidCycleController(
+            SolenoidSettings(enabled=False),
+            inference_snapshot=lambda: stale_snapshot,
+            max_frame_age_seconds=0.05,
+        )
+
+        self.assertFalse(controller._inference_ready(stale_snapshot))
+
+    def test_inspection_rejects_inference_count_from_a_stale_frame(self) -> None:
+        stale_snapshot = {
+            "status": "running",
+            "cameras": [
+                {
+                    "camera_index": 0,
+                    "status": "running",
+                    "inference_count": 1,
+                    "frame_time": time.monotonic() - 1.0,
+                }
+            ],
+        }
+        controller = SolenoidCycleController(
+            SolenoidSettings(enabled=False),
+            inference_snapshot=lambda: stale_snapshot,
+            max_frame_age_seconds=0.05,
+        )
+        controller._inspection_start_counts = {0: 0}
+
+        self.assertFalse(controller._finish_inspection())
 
 
 if __name__ == "__main__":

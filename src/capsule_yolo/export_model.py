@@ -28,7 +28,7 @@ def main() -> None:
     model.export(
         format=args.format,
         imgsz=args.imgsz,
-        quantize=16 if args.half else 32,
+        half=args.half,
         device=args.device,
     )
 

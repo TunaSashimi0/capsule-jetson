@@ -45,21 +45,43 @@ dtb = sys.argv[2]
 overlay = sys.argv[3]
 label = sys.argv[4]
 append_line = None
-linux_line = "      LINUX /boot/Image"
-initrd_line = "      INITRD /boot/initrd"
+linux_line = None
+initrd_line = None
 
 lines = conf_path.read_text().splitlines()
+default_label = None
 for line in lines:
     stripped = line.strip()
-    if stripped.startswith("APPEND ") and append_line is None:
+    if stripped.startswith("DEFAULT "):
+        default_label = stripped.split(maxsplit=1)[1]
+        break
+if default_label is None:
+    raise SystemExit("Could not find DEFAULT entry in boot config")
+
+inside_default = False
+for line in lines:
+    stripped = line.strip()
+    if stripped.startswith("LABEL "):
+        inside_default = stripped.split(maxsplit=1)[1] == default_label
+        continue
+    if not inside_default:
+        continue
+    if stripped.startswith("APPEND "):
         append_line = "      " + stripped
     elif stripped.startswith("LINUX "):
         linux_line = "      " + stripped
     elif stripped.startswith("INITRD "):
         initrd_line = "      " + stripped
 
-if append_line is None:
-    raise SystemExit("Could not find APPEND line in boot config")
+missing = [
+    name
+    for name, value in (("LINUX", linux_line), ("INITRD", initrd_line), ("APPEND", append_line))
+    if value is None
+]
+if missing:
+    raise SystemExit(
+        f"Default boot entry {default_label!r} is missing: {', '.join(missing)}"
+    )
 
 out: list[str] = []
 skip = False
@@ -74,8 +96,6 @@ for line in lines:
     if skip and stripped.startswith("LABEL "):
         skip = False
     if skip:
-        continue
-    if stripped.startswith("FDTOVERLAYS "):
         continue
     out.append(line)
 

@@ -47,6 +47,34 @@ class CounterSettings:
     digital_gain: float = DEFAULT_DIGITAL_GAIN
     half: bool = True
 
+    def validate(self) -> None:
+        if not self.model.strip():
+            raise ValueError("model must not be blank")
+        if not self.source.strip():
+            raise ValueError("source must not be blank")
+        if not 320 <= self.imgsz <= 4096 or self.imgsz % 32:
+            raise ValueError("imgsz must be between 320 and 4096 and divisible by 32")
+        if not 0.0 < self.conf <= 1.0 or not 0.0 < self.iou <= 1.0:
+            raise ValueError("conf and iou must be greater than 0 and at most 1")
+        if not 320 <= self.capture_width <= 8192:
+            raise ValueError("capture_width must be between 320 and 8192")
+        if not 240 <= self.capture_height <= 8192:
+            raise ValueError("capture_height must be between 240 and 8192")
+        if not 1 <= self.capture_fps <= 240:
+            raise ValueError("capture_fps must be between 1 and 240")
+        if not 320 <= self.preview_width <= 3840:
+            raise ValueError("preview_width must be between 320 and 3840")
+        if not 0.0 < self.preview_fps <= 30.0:
+            raise ValueError("preview_fps must be greater than 0 and at most 30")
+        if not 30 <= self.preview_jpeg_quality <= 95:
+            raise ValueError("preview_jpeg_quality must be between 30 and 95")
+        if not 0 <= self.exposure_us <= 1_000_000:
+            raise ValueError("exposure_us must be between 0 and 1000000")
+        if not 0.0 <= self.analog_gain <= 32.0:
+            raise ValueError("analog_gain must be between 0 and 32")
+        if not 0.0 <= self.digital_gain <= 256.0:
+            raise ValueError("digital_gain must be between 0 and 256")
+
     def sources(self) -> tuple[str, ...]:
         values = [self.source]
         if self.secondary_source and self.secondary_source.strip():
@@ -132,6 +160,7 @@ class VideoWorker:
         self._stats = CounterStats()
 
     def start(self, settings: CounterSettings) -> None:
+        settings.validate()
         with self._lock:
             if self._thread and self._thread.is_alive():
                 return
@@ -151,6 +180,11 @@ class VideoWorker:
 
     def restart(self, settings: CounterSettings) -> None:
         self.stop()
+        with self._lock:
+            worker_alive = bool(self._thread and self._thread.is_alive())
+            preview_alive = bool(self._preview_thread and self._preview_thread.is_alive())
+        if worker_alive or preview_alive:
+            raise RuntimeError("video worker did not stop within the shutdown timeout")
         self.start(settings)
 
     def stop(self) -> None:
@@ -164,14 +198,17 @@ class VideoWorker:
         if preview_thread and preview_thread.is_alive():
             preview_thread.join(timeout=3.0)
         with self._lock:
-            if not (self._thread and self._thread.is_alive()):
+            worker_alive = bool(self._thread and self._thread.is_alive())
+            preview_alive = bool(self._preview_thread and self._preview_thread.is_alive())
+            if not worker_alive:
                 self._thread = None
-            if not (self._preview_thread and self._preview_thread.is_alive()):
+            if not preview_alive:
                 self._preview_thread = None
             self._pending_previews.clear()
-            self._stats.status = "stopped"
+            status = "stop timeout" if worker_alive or preview_alive else "stopped"
+            self._stats.status = status
             for camera in self._stats.cameras:
-                camera.status = "stopped"
+                camera.status = status
 
     def stats(self) -> dict[str, object]:
         with self._lock:
@@ -275,7 +312,7 @@ class VideoWorker:
                 return
 
             per_camera_fps = [0.0 for _ in captures]
-            last_times = [time.perf_counter() for _ in captures]
+            last_times = [time.monotonic() for _ in captures]
             active = [True for _ in captures]
 
             while not self._stop_event.is_set() and any(active):
@@ -299,7 +336,7 @@ class VideoWorker:
                             self._publish(camera_states, settings, status="camera error")
                         else:
                             captures[index], specs[index] = replacement
-                            last_times[index] = time.perf_counter()
+                            last_times[index] = time.monotonic()
                         continue
 
                     # Keep the native frame intact through inference. Only the
@@ -315,7 +352,7 @@ class VideoWorker:
                     )[0]
                     summary = summarize_result(result)
 
-                    now = time.perf_counter()
+                    now = time.monotonic()
                     elapsed = max(now - last_times[index], 1e-6)
                     instant_fps = 1.0 / elapsed
                     per_camera_fps[index] = (

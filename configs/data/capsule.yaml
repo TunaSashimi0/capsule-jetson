@@ -1,4 +1,4 @@
-path: C:/Users/Alex/Desktop/capsule-jetson/data/prepared
+path: data/prepared
 train: images/train
 val: images/val
 test: images/test

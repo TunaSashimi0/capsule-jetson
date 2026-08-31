@@ -4,7 +4,7 @@ FROM ${BASE_IMAGE}
 ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
-    YOLO_CONFIG_DIR=/tmp/ultralytics \
+    YOLO_CONFIG_DIR=/tmp \
     MPLCONFIGDIR=/tmp/matplotlib
 
 WORKDIR /app
@@ -21,7 +21,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     v4l-utils \
     && rm -rf /var/lib/apt/lists/*
 
-COPY requirements.txt .
+COPY requirements.shared.txt .
+COPY scripts/verify_dependency_versions.py /tmp/verify_dependency_versions.py
 
 # Jetson PyTorch wheels are tightly coupled to JetPack/L4T. Keep the CUDA-enabled
 # torch packages from the NVIDIA base image and install the app stack around them.
@@ -44,8 +45,9 @@ if missing:
 PY
 
 RUN python3 -m pip install --upgrade pip setuptools wheel && \
-    python3 -m pip install -r requirements.txt -c /tmp/jetson-torch-constraints.txt && \
-    python3 -m pip uninstall -y opencv-python opencv-python-headless
+    python3 -m pip install -r requirements.shared.txt -c /tmp/jetson-torch-constraints.txt && \
+    python3 -m pip uninstall -y opencv-python opencv-python-headless && \
+    python3 /tmp/verify_dependency_versions.py requirements.shared.txt
 
 COPY src ./src
 COPY configs ./configs
@@ -57,6 +59,6 @@ RUN mkdir -p /app/models/base /app/models/trained /app/runs /app/data/samples
 EXPOSE 8000
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
-    CMD python3 -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/stats', timeout=2).read()"
+    CMD python3 -m src.app.health
 
 CMD ["uvicorn", "src.app.main:app", "--host", "0.0.0.0", "--port", "8000"]

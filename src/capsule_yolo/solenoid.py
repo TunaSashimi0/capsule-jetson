@@ -6,6 +6,9 @@ from dataclasses import asdict, dataclass
 from typing import Callable, Protocol
 
 
+DEFAULT_MAX_FRAME_AGE_SECONDS = 5.0
+
+
 @dataclass(frozen=True)
 class SolenoidSettings:
     enabled: bool = False
@@ -132,11 +135,15 @@ class SolenoidCycleController:
         *,
         inference_snapshot: Callable[[], dict[str, object]],
         driver_factory: Callable[[SolenoidSettings], SolenoidDriver] = MCP230xxSolenoidDriver,
+        max_frame_age_seconds: float = DEFAULT_MAX_FRAME_AGE_SECONDS,
     ) -> None:
         settings.validate()
+        if max_frame_age_seconds <= 0:
+            raise ValueError("max_frame_age_seconds must be positive")
         self._settings = settings
         self._inference_snapshot = inference_snapshot
         self._driver_factory = driver_factory
+        self._max_frame_age_seconds = max_frame_age_seconds
         self._lock = threading.Lock()
         self._stop_event = threading.Event()
         self._thread: threading.Thread | None = None
@@ -306,10 +313,16 @@ class SolenoidCycleController:
     def _inference_ready(self, snapshot: dict[str, object] | None = None) -> bool:
         snapshot = snapshot or self._inference_snapshot()
         cameras = snapshot.get("cameras", [])
+        now = time.monotonic()
         return bool(
             snapshot.get("status") == "running"
             and cameras
-            and all(camera.get("status") == "running" for camera in cameras)
+            and all(
+                camera.get("status") == "running"
+                and isinstance(camera.get("frame_time"), (int, float))
+                and 0.0 <= now - float(camera["frame_time"]) <= self._max_frame_age_seconds
+                for camera in cameras
+            )
         )
 
     @staticmethod
@@ -322,6 +335,7 @@ class SolenoidCycleController:
 
     def _finish_inspection(self) -> bool:
         snapshot = self._inference_snapshot()
+        inference_ready = self._inference_ready(snapshot)
         current = self._camera_inference_counts(snapshot)
         with self._lock:
             start = self._inspection_start_counts
@@ -335,7 +349,7 @@ class SolenoidCycleController:
             self._stats.inspection_inferences = sum(counts)
             self._inspection_start_counts = None
             self._minimum_start_counts = current
-            return bool(counts) and all(count > 0 for count in counts)
+            return inference_ready and bool(counts) and all(count > 0 for count in counts)
 
     def _safe_all_off(self) -> None:
         driver = self._driver

@@ -1,14 +1,7 @@
-# Direct runtime dependencies. Upper bounds prevent an unreviewed major-version
-# upgrade while still allowing platform-specific wheels on desktop and Jetson.
-torch>=2.0.0,<3.0.0
-torchvision>=0.15.0,<1.0.0
-ultralytics>=8.3.0,<9.0.0
-opencv-python>=4.9.0,<4.13.0
-fastapi>=0.111.0,<1.0.0
-uvicorn[standard]>=0.30.0,<1.0.0
-jinja2>=3.1.0,<4.0.0
-numpy>=1.26.0,<2.0.0
-pyyaml>=6.0.0,<7.0.0
-Adafruit-Blinka>=8.0.0,<9.0.0
-adafruit-extended-bus>=1.0.2,<2.0.0
-adafruit-circuitpython-mcp230xx>=2.6.2,<3.0.0
+# Local/desktop installation. Application dependencies are shared exactly with
+# Docker; accelerator and OpenCV builds are platform-specific.
+-r requirements.shared.txt
+
+torch==2.11.0
+torchvision==0.26.0
+opencv-python==4.11.0.86

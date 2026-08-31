@@ -2,6 +2,13 @@
 
 This project trains and runs a YOLO11-OBB capsule detector for edge-device testing. The current dataset has two oriented-bounding-box classes: `capsule_defect` (class 0) and `capsule_good` (class 1).
 
+Codebase documentation:
+
+- [Architecture and operations](docs/architecture.md)
+- [Production-readiness audit and recommended next steps](docs/production-readiness.md)
+
+The current build is intended for controlled development and supervised trials on a trusted network. Read the production-readiness document before exposing the API or enabling unattended solenoid control.
+
 ## Current Dataset
 
 The source labels are expected at:
@@ -54,9 +61,40 @@ python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
 ```
 
-`requirements.txt` lists every direct Python runtime dependency with bounded
-versions. PyTorch wheels are platform-specific; use the Jetson container path
-below instead of replacing NVIDIA's CUDA-enabled PyTorch with a generic wheel.
+`requirements.shared.txt` exactly pins the application dependencies used by
+both local Python and Docker. `requirements.txt` includes that shared lock plus
+the local/desktop PyTorch, torchvision, and OpenCV builds. Those three packages
+are platform-specific: the Jetson image retains NVIDIA's CUDA-enabled PyTorch
+and system GStreamer-enabled OpenCV instead of replacing them with generic
+wheels.
+
+Verify that an existing local environment matches the shared application lock:
+
+```bash
+.venv/bin/python scripts/verify_dependency_versions.py requirements.shared.txt
+```
+
+When the shared lock changes, update the local application layer with:
+
+```bash
+.venv/bin/python -m pip install --upgrade -r requirements.shared.txt
+```
+
+## Run Tests in the Local Environment
+
+After activating the virtual environment, run the hardware-independent suite from the repository root:
+
+```bash
+scripts/run_tests.sh
+```
+
+The wrapper invokes `.venv/bin/python` directly, so activation is optional. It also locates a venv-bundled `libcudss.so.0` when a CUDA PyTorch wheel did not record that library directory in its runtime search path. To use another interpreter:
+
+```bash
+CAPSULE_TEST_PYTHON=/path/to/python scripts/run_tests.sh
+```
+
+Do not install a generic PyTorch wheel over NVIDIA's Jetson build to resolve a loader error. Unit tests do not replace the target-device checks listed in the [production-readiness audit](docs/production-readiness.md).
 
 ## Repository Data and Models
 

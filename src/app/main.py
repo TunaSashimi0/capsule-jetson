@@ -18,6 +18,7 @@ from fastapi.templating import Jinja2Templates
 
 from src.capsule_yolo.config import DEFAULT_MODEL_IMGSZ, DEFAULT_TRAINED_MODEL, PROJECT_ROOT
 from src.capsule_yolo.solenoid import SolenoidCycleController, SolenoidSettings
+from src.app.settings import CounterSettingsUpdate
 from src.app.video_worker import CounterSettings, VideoWorker
 
 
@@ -49,6 +50,7 @@ settings = CounterSettings(
     digital_gain=float(os.getenv("CAPSULE_DIGITAL_GAIN", "1.0")),
     half=env_bool("CAPSULE_HALF", True),
 )
+settings.validate()
 solenoid_settings = SolenoidSettings(
     enabled=env_bool("CAPSULE_SOLENOID_ENABLED", False),
     chip=os.getenv("CAPSULE_SOLENOID_CHIP", "mcp23017"),
@@ -128,39 +130,44 @@ def stats() -> JSONResponse:
 
 
 @app.post("/settings")
-async def update_settings(request: Request) -> JSONResponse:
+async def update_settings(payload: CounterSettingsUpdate) -> JSONResponse:
     global settings
-    payload = await request.json()
-    settings = CounterSettings(
-        model=str(payload.get("model") or settings.model),
-        source=str(payload.get("source") or settings.source),
-        secondary_source=(str(payload.get("secondary_source") or "").strip() or None),
-        imgsz=int(payload.get("imgsz") or settings.imgsz),
-        conf=float(payload.get("conf") or settings.conf),
-        iou=float(payload.get("iou") or settings.iou),
-        device=(str(payload.get("device")) if payload.get("device") else None),
-        capture_width=int(payload.get("capture_width") or settings.capture_width),
-        capture_height=int(payload.get("capture_height") or settings.capture_height),
-        capture_fps=int(payload.get("capture_fps") or settings.capture_fps),
-        preview_width=int(payload.get("preview_width") or settings.preview_width),
-        preview_fps=float(payload.get("preview_fps") or settings.preview_fps),
-        preview_jpeg_quality=int(
-            payload.get("preview_jpeg_quality") or settings.preview_jpeg_quality
+    updates = payload.model_dump(exclude_unset=True)
+
+    def updated(name: str, current: Any) -> Any:
+        value = updates.get(name)
+        return current if value is None else value
+
+    new_settings = CounterSettings(
+        model=updated("model", settings.model),
+        source=updated("source", settings.source),
+        secondary_source=(
+            updates["secondary_source"]
+            if "secondary_source" in updates
+            else settings.secondary_source
         ),
-        autofocus=str(payload.get("autofocus", "false")).lower() in {"1", "true", "yes", "on"},
-        exposure_us=(
-            int(payload["exposure_us"]) if "exposure_us" in payload else settings.exposure_us
+        imgsz=updated("imgsz", settings.imgsz),
+        conf=updated("conf", settings.conf),
+        iou=updated("iou", settings.iou),
+        device=updates["device"] if "device" in updates else settings.device,
+        capture_width=updated("capture_width", settings.capture_width),
+        capture_height=updated("capture_height", settings.capture_height),
+        capture_fps=updated("capture_fps", settings.capture_fps),
+        preview_width=updated("preview_width", settings.preview_width),
+        preview_fps=updated("preview_fps", settings.preview_fps),
+        preview_jpeg_quality=updated(
+            "preview_jpeg_quality", settings.preview_jpeg_quality
         ),
-        analog_gain=(
-            float(payload["analog_gain"]) if "analog_gain" in payload else settings.analog_gain
-        ),
-        digital_gain=(
-            float(payload["digital_gain"]) if "digital_gain" in payload else settings.digital_gain
-        ),
-        half=bool(payload.get("half", settings.half)),
+        autofocus=updated("autofocus", settings.autofocus),
+        exposure_us=updated("exposure_us", settings.exposure_us),
+        analog_gain=updated("analog_gain", settings.analog_gain),
+        digital_gain=updated("digital_gain", settings.digital_gain),
+        half=updated("half", settings.half),
     )
+    new_settings.validate()
     solenoid_controller.stop()
-    worker.restart(settings)
+    worker.restart(new_settings)
+    settings = new_settings
     solenoid_controller.start()
     return JSONResponse({"ok": True, "settings": settings.__dict__})
 

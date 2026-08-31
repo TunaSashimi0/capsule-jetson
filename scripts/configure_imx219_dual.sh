@@ -72,6 +72,30 @@ path = Path(sys.argv[1])
 label, kernel, fdt, overlay = sys.argv[2:]
 lines = path.read_text().splitlines()
 
+# Clone the APPEND arguments from the current default entry. Root devices and
+# boot arguments are machine-specific and must never be synthesized here.
+default_label = None
+for line in lines:
+    stripped = line.strip()
+    if stripped.startswith("DEFAULT "):
+        default_label = stripped.split(maxsplit=1)[1]
+        break
+if default_label is None:
+    raise SystemExit("extlinux.conf has no DEFAULT line")
+
+append_args = None
+inside_default = False
+for line in lines:
+    stripped = line.strip()
+    if stripped.startswith("LABEL "):
+        inside_default = stripped.split(maxsplit=1)[1] == default_label
+        continue
+    if inside_default and stripped.startswith("APPEND "):
+        append_args = stripped.split(maxsplit=1)[1]
+        break
+if append_args is None:
+    raise SystemExit(f"default boot entry {default_label!r} has no APPEND line")
+
 # Remove an older copy of our managed section, if one exists.
 out: list[str] = []
 skip = False
@@ -103,7 +127,7 @@ out.extend(
         f"\tLINUX {kernel}",
         f"\tFDT {fdt}",
         "\tINITRD /boot/initrd",
-        "\tAPPEND ${cbootargs} root=PARTUUID=e63620c6-a219-48ec-af38-f11246c04ce3 rw rootwait rootfstype=ext4 mminit_loglevel=4 console=ttyTCU0,115200 firmware_class.path=/etc/firmware fbcon=map:0 video=efifb:off console=tty0 efi=runtime pci=pcie_bus_perf nvme.use_threaded_interrupts=1",
+        f"\tAPPEND {append_args}",
         f"\tOVERLAYS {overlay}",
     ]
 )

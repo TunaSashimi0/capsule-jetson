@@ -8,7 +8,14 @@ import shutil
 from dataclasses import dataclass
 from pathlib import Path
 
-from .config import DATA_YAML, IMAGE_SUFFIXES, LABELED_DATA_DIR, PREPARED_DATA_DIR, project_path
+from .config import (
+    DATA_YAML,
+    IMAGE_SUFFIXES,
+    LABELED_DATA_DIR,
+    PREPARED_DATA_DIR,
+    PROJECT_ROOT,
+    project_path,
+)
 
 
 @dataclass(frozen=True)
@@ -217,7 +224,11 @@ def count_boxes(label_paths: list[Path]) -> int:
 
 
 def write_data_yaml(output_dir: Path, data_yaml: Path, class_names: list[str]) -> None:
-    yaml_path = output_dir.resolve().as_posix()
+    resolved_output = output_dir.resolve()
+    try:
+        yaml_path = resolved_output.relative_to(PROJECT_ROOT.resolve()).as_posix()
+    except ValueError:
+        yaml_path = resolved_output.as_posix()
     names = [
         f"  {class_id}: {json.dumps(class_name)}"
         for class_id, class_name in enumerate(class_names)

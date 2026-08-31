@@ -37,7 +37,7 @@ def main() -> None:
         "imgsz": args.imgsz,
         "batch": args.batch,
         "device": args.device,
-        "quantize": 16 if args.half else 32,
+        "half": args.half,
     }
     if args.task:
         validation_args["task"] = args.task
