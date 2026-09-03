@@ -386,3 +386,18 @@ CAPSULE_SOLENOID_COOLDOWN_SECONDS=120
 Keep `CAPSULE_SOLENOID_ENABLED=false` until `CAPSULE_SOLENOID_ACTIVE_HIGH` is known. Choosing the wrong polarity can energize a valve while the application considers it off.
 
 The default trained OBB model is tracked through Git LFS at `models/trained/capsule_yolo11s_obb_best.pt`. Run `git lfs pull` after cloning to retrieve the model and labeled images, or set `CAPSULE_MODEL` to another model path mounted inside the container.
+
+## OCEANMES connection
+
+The edge-side OCEANMES client is isolated in `src/oceanmes/`; it does not
+import the camera or ML stack and is disabled by default. Provision an edge
+device in OCEANMES, copy the one-time bearer key into the untracked
+`.env.jetson`, enable the integration, and verify configuration retrieval:
+
+~~~bash
+python -m src.oceanmes config
+~~~
+
+See [docs/oceanmes_connection.md](docs/oceanmes_connection.md) for the
+connection boundary, environment variables, TLS policy, server contract, and
+planned durable-outbox handoff.
