@@ -30,6 +30,7 @@ Thumbs.db
 /data/prepared/
 /data/samples/*
 !/data/samples/.gitkeep
+/data/oceanmes/
 /datasets/
 *.cache
 

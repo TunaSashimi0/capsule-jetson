@@ -5,6 +5,8 @@ stack. Network work can therefore run outside the inference hot path.
 """
 
 from .client import OceanMesClient, OceanMesError, OceanMesResponseError
+from .event_log import EdgeEventLog
+from .heartbeat import OceanMesHeartbeat
 from .models import (
     CameraInspectionSummary,
     InspectionManifest,
@@ -15,11 +17,13 @@ from .settings import OceanMesConfigurationError, OceanMesSettings
 
 __all__ = [
     "CameraInspectionSummary",
+    "EdgeEventLog",
     "InspectionManifest",
     "ModelIdentity",
     "OceanMesClient",
     "OceanMesConfigurationError",
     "OceanMesError",
+    "OceanMesHeartbeat",
     "OceanMesResponseError",
     "OceanMesSettings",
     "ServerDeviceConfiguration",

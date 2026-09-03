@@ -44,10 +44,12 @@ class OceanMesSettings:
     api_key: str = field(default="", repr=False)
     connect_timeout_seconds: float = 3.0
     read_timeout_seconds: float = 30.0
+    heartbeat_seconds: float = 30.0
     verify_tls: bool = True
     ca_bundle: Path | None = None
     allow_http: bool = False
     edge_software_version: str = "capsule-jetson-dev"
+    event_log_path: Path = Path("data/oceanmes/events.jsonl")
 
     @classmethod
     def from_env(cls, environ: Mapping[str, str] | None = None) -> "OceanMesSettings":
@@ -63,12 +65,18 @@ class OceanMesSettings:
             read_timeout_seconds=_env_float(
                 values, "OCEANMES_READ_TIMEOUT_SECONDS", 30.0, minimum=0.1
             ),
+            heartbeat_seconds=_env_float(
+                values, "OCEANMES_HEARTBEAT_SECONDS", 30.0, minimum=1.0
+            ),
             verify_tls=_env_bool(values, "OCEANMES_VERIFY_TLS", True),
             ca_bundle=Path(ca_value).expanduser() if ca_value else None,
             allow_http=_env_bool(values, "OCEANMES_ALLOW_HTTP", False),
             edge_software_version=(
                 values.get("CAPSULE_EDGE_SOFTWARE_VERSION") or "capsule-jetson-dev"
             ).strip(),
+            event_log_path=Path(
+                values.get("OCEANMES_EVENT_LOG") or "data/oceanmes/events.jsonl"
+            ).expanduser(),
         )
         settings.validate()
         return settings

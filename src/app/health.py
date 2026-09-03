@@ -40,10 +40,32 @@ def inference_is_ready(
     return True
 
 
+def service_is_healthy(
+    payload: Mapping[str, Any],
+    *,
+    max_frame_age_seconds: float = DEFAULT_MAX_FRAME_AGE_SECONDS,
+    now: float | None = None,
+) -> bool:
+    """Accept an intentional idle state without requiring camera frames."""
+    runtime_state = payload.get("runtime_state")
+    if runtime_state == "idle":
+        oceanmes = payload.get("oceanmes")
+        if not isinstance(oceanmes, Mapping):
+            return False
+        return oceanmes.get("state") in {"connected", "disabled"}
+    if runtime_state not in {None, "inference"}:
+        return False
+    return inference_is_ready(
+        payload,
+        max_frame_age_seconds=max_frame_age_seconds,
+        now=now,
+    )
+
+
 def check_local_stats(url: str = DEFAULT_STATS_URL) -> bool:
     with urllib.request.urlopen(url, timeout=2) as response:
         payload = json.load(response)
-    return isinstance(payload, dict) and inference_is_ready(payload)
+    return isinstance(payload, dict) and service_is_healthy(payload)
 
 
 def main() -> int:

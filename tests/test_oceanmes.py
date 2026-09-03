@@ -5,6 +5,8 @@ import unittest
 from pathlib import Path
 
 from src.oceanmes.client import OceanMesClient, OceanMesResponseError
+from src.oceanmes.event_log import EdgeEventLog
+from src.oceanmes.heartbeat import OceanMesHeartbeat
 from src.oceanmes.models import (
     CameraInspectionSummary,
     InspectionManifest,
@@ -70,6 +72,21 @@ class FakeSession:
         self.closed = True
 
 
+class FakeClient:
+    def __init__(self, results):
+        self.results = list(results)
+        self.closed = False
+
+    def get_configuration(self):
+        result = self.results.pop(0)
+        if isinstance(result, Exception):
+            raise result
+        return result
+
+    def close(self):
+        self.closed = True
+
+
 class OceanMesSettingsTests(unittest.TestCase):
     def test_disabled_is_the_safe_default(self):
         settings = OceanMesSettings.from_env({})
@@ -87,6 +104,89 @@ class OceanMesSettingsTests(unittest.TestCase):
 
     def test_api_key_is_not_in_settings_repr(self):
         self.assertNotIn(TEST_KEY, repr(valid_settings()))
+
+    def test_heartbeat_interval_has_a_safe_minimum(self):
+        with self.assertRaises(OceanMesConfigurationError):
+            OceanMesSettings.from_env(
+                {
+                    "OCEANMES_ENABLED": "true",
+                    "OCEANMES_BASE_URL": "https://oceanmes.example",
+                    "OCEANMES_EDGE_API_KEY": TEST_KEY,
+                    "OCEANMES_HEARTBEAT_SECONDS": "0.1",
+                }
+            )
+
+
+class EdgeEventLogTests(unittest.TestCase):
+    def test_event_contains_unix_and_utc_timestamps(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "events.jsonl"
+            event_log = EdgeEventLog(path, clock=lambda: 1_788_379_200.125)
+            event_log.emit("device_idle", state="idle")
+            event_log.close()
+            record = json.loads(path.read_text(encoding="utf-8"))
+
+        self.assertEqual(record["unix_seconds"], 1_788_379_200)
+        self.assertEqual(record["unix_milliseconds"], 1_788_379_200_125)
+        self.assertEqual(record["event"], "device_idle")
+        self.assertTrue(record["utc"].endswith("Z"))
+
+    def test_sensitive_fields_are_refused(self):
+        with tempfile.TemporaryDirectory() as directory:
+            event_log = EdgeEventLog(Path(directory) / "events.jsonl")
+            with self.assertRaisesRegex(ValueError, "sensitive"):
+                event_log.emit("bad", api_key=TEST_KEY)
+            event_log.close()
+
+
+class OceanMesHeartbeatTests(unittest.TestCase):
+    def test_poll_is_a_heartbeat_and_configuration_change_signal(self):
+        configuration = server_configuration()
+        callbacks = []
+        with tempfile.TemporaryDirectory() as directory:
+            event_log = EdgeEventLog(
+                Path(directory) / "events.jsonl", clock=lambda: 1_788_379_200.0
+            )
+            heartbeat = OceanMesHeartbeat(
+                valid_settings(heartbeat_seconds=30),
+                event_log,
+                on_configured=callbacks.append,
+                client=FakeClient([configuration, configuration]),
+                clock=lambda: 1_788_379_200.0,
+            )
+
+            heartbeat.poll_once()
+            heartbeat.poll_once()
+            status = heartbeat.status()
+            event_log.close()
+
+        self.assertEqual(status["state"], "connected")
+        self.assertEqual(status["last_success_unix_seconds"], 1_788_379_200)
+        self.assertEqual(status["consecutive_failures"], 0)
+        self.assertEqual(len(callbacks), 1)
+        self.assertEqual(callbacks[0].room_code, "CAP-101")
+
+    def test_failed_poll_keeps_timestamped_retry_state(self):
+        error = OceanMesResponseError(503, "service_unavailable", "retry", True)
+        with tempfile.TemporaryDirectory() as directory:
+            event_log = EdgeEventLog(
+                Path(directory) / "events.jsonl", clock=lambda: 1_788_379_201.0
+            )
+            heartbeat = OceanMesHeartbeat(
+                valid_settings(),
+                event_log,
+                client=FakeClient([error]),
+                clock=lambda: 1_788_379_201.0,
+            )
+
+            self.assertIsNone(heartbeat.poll_once())
+            status = heartbeat.status()
+            event_log.close()
+
+        self.assertEqual(status["state"], "error")
+        self.assertEqual(status["last_attempt_unix_seconds"], 1_788_379_201)
+        self.assertEqual(status["consecutive_failures"], 1)
+        self.assertTrue(status["last_error"]["retryable"])
 
 
 class OceanMesManifestTests(unittest.TestCase):

@@ -22,6 +22,8 @@ The first implementation provides:
 - multipart upload with exactly the manifest and evidence parts; and
 - structured errors that distinguish retryable transport/server failures from
   permanent contract or authentication failures.
+- an idle-first runtime with an independent configuration heartbeat; and
+- rotating JSONL event logs with Unix-second, Unix-millisecond, and UTC fields.
 
 It does not yet call the client from the inference thread. The scheduler,
 representative-frame selection, dual-camera composite, and durable retry outbox
@@ -43,6 +45,25 @@ Model hashing must happen once at process startup. Evidence encoding, hashing,
 disk persistence, and network upload must occur outside the inference hot path.
 No network failure may pause camera capture, inference, or solenoid safety.
 
+## Idle and heartbeat lifecycle
+
+The production process starts in `idle`. In this state the cameras, model, and
+solenoids do not run, but the independent OCEANMES worker immediately calls the
+configuration endpoint and repeats that GET every 30 seconds. Each successful
+GET is both a heartbeat and a configuration refresh; OCEANMES records the
+device's `last_seen_at` value.
+
+A newly received valid configuration starts inference when
+`OCEANMES_START_INFERENCE_WHEN_CONFIGURED=true`. Set it to `false` for local
+Windows connection tests so that a server response cannot attempt to open
+Jetson cameras. `POST /stop` returns to idle without stopping the heartbeat.
+Video-feed endpoints return HTTP 409 while idle instead of implicitly starting
+inference.
+
+The event log defaults to `data/oceanmes/events.jsonl` and rotates at 5 MiB.
+Every record includes `unix_seconds`, `unix_milliseconds`, and `utc`. The API
+key and authorization header are never recorded.
+
 ## Device configuration
 
 Provision the device from OCEANMES **Quality > Capsule Edge Devices**. Copy the
@@ -53,6 +74,10 @@ OCEANMES_ENABLED=true
 OCEANMES_BASE_URL=https://oceanmes.com
 OCEANMES_EDGE_API_KEY=oce_edge_<one-time-secret>
 OCEANMES_VERIFY_TLS=true
+OCEANMES_HEARTBEAT_SECONDS=30
+OCEANMES_EVENT_LOG=/app/data/oceanmes/events.jsonl
+CAPSULE_START_IDLE=true
+OCEANMES_START_INFERENCE_WHEN_CONFIGURED=true
 CAPSULE_EDGE_SOFTWARE_VERSION=<release-or-commit>
 ~~~
 

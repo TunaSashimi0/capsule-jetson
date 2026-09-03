@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import unittest
 
-from src.app.health import inference_is_ready
+from src.app.health import inference_is_ready, service_is_healthy
 
 
 class InferenceHealthTests(unittest.TestCase):
@@ -40,6 +40,39 @@ class InferenceHealthTests(unittest.TestCase):
 
     def test_future_frame_timestamp_is_unhealthy(self) -> None:
         self.assertFalse(inference_is_ready(self.payload(frame_time=101.0), now=100.0))
+
+    def test_connected_idle_device_is_healthy_without_camera_frames(self) -> None:
+        payload = {
+            "runtime_state": "idle",
+            "status": "stopped",
+            "model_exists": True,
+            "cameras": [],
+            "oceanmes": {"state": "connected"},
+        }
+
+        self.assertTrue(service_is_healthy(payload, now=100.0))
+
+    def test_deliberately_disconnected_idle_device_is_healthy(self) -> None:
+        payload = {
+            "runtime_state": "idle",
+            "oceanmes": {"state": "disabled"},
+        }
+
+        self.assertTrue(service_is_healthy(payload, now=100.0))
+
+    def test_idle_device_with_failed_heartbeat_is_unhealthy(self) -> None:
+        payload = {
+            "runtime_state": "idle",
+            "oceanmes": {"state": "error"},
+        }
+
+        self.assertFalse(service_is_healthy(payload, now=100.0))
+
+    def test_inference_runtime_still_requires_recent_frames(self) -> None:
+        payload = self.payload()
+        payload["runtime_state"] = "inference"
+
+        self.assertTrue(service_is_healthy(payload, now=100.0))
 
 
 if __name__ == "__main__":
