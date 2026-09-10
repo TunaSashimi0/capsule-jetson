@@ -385,4 +385,28 @@ CAPSULE_SOLENOID_COOLDOWN_SECONDS=120
 
 Keep `CAPSULE_SOLENOID_ENABLED=false` until `CAPSULE_SOLENOID_ACTIVE_HIGH` is known. Choosing the wrong polarity can energize a valve while the application considers it off.
 
+For a supervised port-by-port hardware test of the Adafruit 8-channel board,
+stop the web application so it does not share the expander, disconnect the
+solenoid power supply for the first LED-only check, and run:
+
+```bash
+sudo .venv/bin/python scripts/test_solenoid_ports.py --energize
+```
+
+The test pulses outputs `0/A0` through `7/A7` one at a time for 0.2 seconds,
+with every output off for 0.5 seconds between pulses, and repeats until Ctrl+C.
+It defaults to `/dev/i2c-7` and address `0x20`, commands all eight outputs off on
+startup and exit, and does not modify the MCP23017 B port. To test selected
+outputs or make a fixed number of passes:
+
+```bash
+sudo .venv/bin/python scripts/test_solenoid_ports.py --energize --ports 0,3,7 --cycles 2
+```
+
+Use `--help` for timing, bus, address, and polarity options. On the Jetson
+40-pin header, the complete logic wiring is 3.3 V (physical pin 1) to Vcc,
+I2C1_SDA (pin 3) to SDA, I2C1_SCL (pin 5) to SCL, and GND (pin 9) to GND. Solenoid
+power is separate: connect a correctly rated supply to the board's V+ and GND
+terminal. Do not power a solenoid from the Jetson header.
+
 The default trained OBB model is tracked through Git LFS at `models/trained/capsule_yolo11s_obb_best.pt`. Run `git lfs pull` after cloning to retrieve the model and labeled images, or set `CAPSULE_MODEL` to another model path mounted inside the container.
