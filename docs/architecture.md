@@ -12,6 +12,7 @@ The repository deliberately keeps model weights, generated dataset splits, and r
 | --- | --- |
 | `src/capsule_yolo/` | Dataset preparation, training, validation, export, inference, counting, drawing, camera selection, autofocus, and solenoid control |
 | `src/app/` | FastAPI application, request validation, video worker, health probe, templates, and static assets |
+| `src/oceanmes/` | Server connection settings, authenticated HTTP transport, authoritative device configuration, and inspection manifest construction |
 | `configs/` | Ultralytics dataset, training, and inference defaults |
 | `tests/` | Hardware-independent unit and regression tests |
 | `scripts/` | Jetson image/container helpers, camera overlay provisioning, and hardware diagnostics |

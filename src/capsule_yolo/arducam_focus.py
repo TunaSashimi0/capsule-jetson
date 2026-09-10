@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import fcntl
 import os
 import statistics
 import threading
@@ -11,6 +10,11 @@ from typing import Callable
 
 import cv2
 import numpy as np
+
+try:
+    import fcntl
+except ImportError:  # Windows local HTTP tests do not access Jetson I2C devices.
+    fcntl = None  # type: ignore[assignment]
 
 
 I2C_SLAVE = 0x0703
@@ -38,6 +42,8 @@ def set_focus(bus: int, position: int) -> None:
     """Set a B0181 IMX219-AF lens to a 10-bit focus position."""
     if not 0 <= position <= 1023:
         raise ValueError(f"focus position {position} is outside 0..1023")
+    if fcntl is None:
+        raise RuntimeError("Arducam focus control requires Linux fcntl support")
     device = Path(f"/dev/i2c-{bus}")
     if not device.exists():
         raise FileNotFoundError(f"{device} is unavailable")

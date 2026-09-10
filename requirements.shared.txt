@@ -8,6 +8,7 @@ numpy==1.26.4
 pyyaml==6.0.3
 pydantic==2.13.4
 packaging==26.2
+requests==2.34.2
 Adafruit-Blinka==8.70.0
 adafruit-extended-bus==1.0.2
 adafruit-circuitpython-mcp230xx==2.6.2

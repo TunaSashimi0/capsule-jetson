@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import os
 import sys
+import threading
+import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
@@ -11,7 +13,7 @@ PROJECT_ROOT_PATH = APP_DIR.parents[1]
 if str(PROJECT_ROOT_PATH) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT_PATH))
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -20,6 +22,7 @@ from src.capsule_yolo.config import DEFAULT_MODEL_IMGSZ, DEFAULT_TRAINED_MODEL, 
 from src.capsule_yolo.solenoid import SolenoidCycleController, SolenoidSettings
 from src.app.settings import CounterSettingsUpdate
 from src.app.video_worker import CounterSettings, VideoWorker
+from src.oceanmes import EdgeEventLog, OceanMesHeartbeat, OceanMesSettings
 
 
 def env_bool(name: str, default: bool) -> bool:
@@ -68,15 +71,92 @@ solenoid_controller = SolenoidCycleController(
     solenoid_settings,
     inference_snapshot=worker.stats,
 )
+oceanmes_settings = OceanMesSettings.from_env()
+edge_event_log = EdgeEventLog(oceanmes_settings.event_log_path)
+start_idle = env_bool("CAPSULE_START_IDLE", True)
+start_inference_when_configured = env_bool(
+    "OCEANMES_START_INFERENCE_WHEN_CONFIGURED", True
+)
+runtime_lock = threading.RLock()
+runtime_state = "idle"
+shutting_down = False
+
+
+def _start_inference(reason: str) -> bool:
+    global runtime_state
+    with runtime_lock:
+        if shutting_down or runtime_state in {"starting", "inference"}:
+            return False
+        runtime_state = "starting"
+        try:
+            worker.start(settings)
+            solenoid_controller.start()
+        except Exception as exc:
+            runtime_state = "error"
+            edge_event_log.emit(
+                "inference_start_failed",
+                reason=reason,
+                error_type=type(exc).__name__,
+                detail=str(exc),
+            )
+            raise
+        runtime_state = "inference"
+        edge_event_log.emit("inference_started", reason=reason)
+        return True
+
+
+def _stop_inference(reason: str) -> bool:
+    global runtime_state
+    with runtime_lock:
+        if runtime_state in {"idle", "stopping"}:
+            return False
+        runtime_state = "stopping"
+        solenoid_controller.stop()
+        worker.stop()
+        runtime_state = "idle"
+        edge_event_log.emit("inference_stopped", reason=reason)
+        return True
+
+
+def _on_oceanmes_configured(configuration: Any) -> None:
+    if start_inference_when_configured:
+        _start_inference("oceanmes_configured")
+        return
+    edge_event_log.emit(
+        "inference_held_idle",
+        reason="automatic_start_disabled",
+        configuration_version=configuration.configuration_version,
+    )
+
+
+oceanmes_heartbeat = OceanMesHeartbeat(
+    oceanmes_settings,
+    edge_event_log,
+    on_configured=_on_oceanmes_configured,
+)
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    worker.start(settings)
-    solenoid_controller.start()
-    yield
-    solenoid_controller.stop()
-    worker.stop()
+    global shutting_down
+    with runtime_lock:
+        shutting_down = False
+    edge_event_log.emit(
+        "edge_process_started",
+        initial_state="idle" if start_idle else "local_inference",
+    )
+    if not start_idle:
+        _start_inference("local_startup_configuration")
+    oceanmes_heartbeat.start()
+    try:
+        yield
+    finally:
+        with runtime_lock:
+            shutting_down = True
+        oceanmes_heartbeat.stop()
+        _stop_inference("process_shutdown")
+        edge_event_log.emit("edge_process_stopped")
+        edge_event_log.close()
 
 
 app = FastAPI(title="YOLO Capsule Counter", lifespan=lifespan)
@@ -103,7 +183,8 @@ def index(request: Request) -> Any:
 
 @app.get("/video_feed")
 def video_feed() -> StreamingResponse:
-    worker.start(settings)
+    if runtime_state != "inference":
+        raise HTTPException(status_code=409, detail="Inference is idle.")
     return StreamingResponse(
         worker.frames(0),
         media_type="multipart/x-mixed-replace; boundary=frame",
@@ -113,7 +194,8 @@ def video_feed() -> StreamingResponse:
 
 @app.get("/video_feed/{camera_index}")
 def indexed_video_feed(camera_index: int) -> StreamingResponse:
-    worker.start(settings)
+    if runtime_state != "inference":
+        raise HTTPException(status_code=409, detail="Inference is idle.")
     return StreamingResponse(
         worker.frames(camera_index),
         media_type="multipart/x-mixed-replace; boundary=frame",
@@ -126,12 +208,15 @@ def stats() -> JSONResponse:
     payload = worker.stats()
     payload["model_exists"] = Path(settings.model).exists()
     payload["solenoid"] = solenoid_controller.stats()
+    payload["runtime_state"] = runtime_state
+    payload["unix_seconds"] = int(time.time())
+    payload["oceanmes"] = oceanmes_heartbeat.status()
     return JSONResponse(payload)
 
 
 @app.post("/settings")
 async def update_settings(payload: CounterSettingsUpdate) -> JSONResponse:
-    global settings
+    global runtime_state, settings
     updates = payload.model_dump(exclude_unset=True)
 
     def updated(name: str, current: Any) -> Any:
@@ -165,18 +250,44 @@ async def update_settings(payload: CounterSettingsUpdate) -> JSONResponse:
         half=updated("half", settings.half),
     )
     new_settings.validate()
-    solenoid_controller.stop()
-    worker.restart(new_settings)
-    settings = new_settings
-    solenoid_controller.start()
-    return JSONResponse({"ok": True, "settings": settings.__dict__})
+    with runtime_lock:
+        runtime_state = "starting"
+        try:
+            solenoid_controller.stop()
+            settings = new_settings
+            worker.restart(settings)
+            solenoid_controller.start()
+        except Exception as exc:
+            runtime_state = "error"
+            edge_event_log.emit(
+                "inference_restart_failed",
+                error_type=type(exc).__name__,
+                detail=str(exc),
+            )
+            raise
+        runtime_state = "inference"
+    edge_event_log.emit("inference_started", reason="local_settings_update")
+    return JSONResponse(
+        {
+            "ok": True,
+            "runtime_state": runtime_state,
+            "unix_seconds": int(time.time()),
+            "settings": settings.__dict__,
+        }
+    )
 
 
 @app.post("/stop")
 def stop() -> JSONResponse:
-    solenoid_controller.stop()
-    worker.stop()
-    return JSONResponse({"ok": True})
+    _stop_inference("local_stop_request")
+    return JSONResponse(
+        {
+            "ok": True,
+            "runtime_state": runtime_state,
+            "unix_seconds": int(time.time()),
+            "oceanmes_heartbeat_continues": oceanmes_settings.enabled,
+        }
+    )
 
 
 if __name__ == "__main__":
